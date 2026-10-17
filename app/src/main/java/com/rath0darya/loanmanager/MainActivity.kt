@@ -1,6 +1,7 @@
 package com.rath0darya.loanmanager
 
 import android.Manifest
+import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
@@ -61,6 +62,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -71,11 +73,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
@@ -120,6 +128,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun LoanManagerApp() {
     val context = LocalContext.current
+    val preferences = remember { context.getSharedPreferences("fundniti_settings", android.content.Context.MODE_PRIVATE) }
+    var themeMode by remember { mutableStateOf(preferences.getString("theme_mode", "SYSTEM") ?: "SYSTEM") }
+    val systemDark = isSystemInDarkTheme()
+    val darkTheme = when (themeMode) {
+        "LIGHT" -> false
+        "DARK" -> true
+        else -> systemDark
+    }
+    val dynamicColors = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val appColorScheme = when {
+        dynamicColors && darkTheme -> androidx.compose.material3.dynamicDarkColorScheme(context)
+        dynamicColors -> androidx.compose.material3.dynamicLightColorScheme(context)
+        darkTheme -> androidx.compose.material3.darkColorScheme(
+            primary = Color(0xFF83D6BB), secondary = Color(0xFFE7C77A),
+            background = Color(0xFF101714), surface = Color(0xFF171F1B),
+            surfaceVariant = Color(0xFF26352E), tertiary = Color(0xFF9BBEFF)
+        )
+        else -> androidx.compose.material3.lightColorScheme(
+            primary = Color(0xFF126B55), onPrimary = Color.White,
+            secondary = Color(0xFFB5D8C8), background = Color(0xFFF2F7F5),
+            surface = Color(0xFFF9FCFB), surfaceVariant = Color(0xFFE5F0EB),
+            tertiary = Color(0xFF4C86D9)
+        )
+    }
     val db = remember { LoanDatabase.get(context) }
     val dao = db.loanDao()
     val loans by dao.observeLoans().collectAsState(initial = emptyList())
@@ -214,35 +246,53 @@ private fun LoanManagerApp() {
     val totalPaid = payments.sumOf { it.amount }
     val monthlyInterest = loans.sumOf { it.principal * it.monthlyRate / 100.0 }
 
-    MaterialTheme(
-        colorScheme = androidx.compose.material3.lightColorScheme(
-            primary = Color(0xFF126B55),
-            onPrimary = Color.White,
-            secondary = Color(0xFFB5D8C8),
-            background = Color(0xFFF2F7F5),
-            surface = Color(0xFFF9FCFB),
-            surfaceVariant = Color(0xFFE5F0EB),
-            tertiary = Color(0xFF4C86D9)
-        )
-    ) {
+    SideEffect {
+        val activity = context as? Activity
+        activity?.window?.let { window ->
+            window.statusBarColor = appColorScheme.background.toArgb()
+            window.navigationBarColor = appColorScheme.background.toArgb()
+            val bars = WindowInsetsControllerCompat(window, window.decorView)
+            bars.isAppearanceLightStatusBars = !darkTheme
+            bars.isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
+
+    MaterialTheme(colorScheme = appColorScheme) {
         Scaffold(
-            containerColor = Color(0xFFF2F7F5),
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFFF2F7F5)
+                        containerColor = MaterialTheme.colorScheme.background
                     ),
                     title = {
                         Column {
-                            Text("Lendora", fontWeight = FontWeight.Bold, color = Color(0xFF123B35))
+                            Text("FundNiti", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                             Text(page.label, style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary)
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            themeMode = when (themeMode) {
+                                "SYSTEM" -> "LIGHT"
+                                "LIGHT" -> "DARK"
+                                else -> "SYSTEM"
+                            }
+                            preferences.edit().putString("theme_mode", themeMode).apply()
+                        }) {
+                            val themeIcon = when (themeMode) {
+                                "LIGHT" -> Icons.Filled.LightMode
+                                "DARK" -> Icons.Filled.DarkMode
+                                else -> Icons.Filled.BrightnessAuto
+                            }
+                            Icon(themeIcon, contentDescription = "Theme: ${themeMode.lowercase()}. Tap to change.")
                         }
                     }
                 )
             },
             bottomBar = {
-                NavigationBar(containerColor = Color(0xFFEAF3EF)) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     AppPage.entries.forEach { item ->
                         NavigationBarItem(
                             selected = page == item,
@@ -459,9 +509,9 @@ private fun LoansScreen(
 private fun LoanCard(
     loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?
 ) {
-    Card(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+    Card(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -525,8 +575,8 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
             val lentTotal = records.filter { it.direction == "LENT" }.sumOf(balance)
             val borrowedTotal = records.filter { it.direction == "BORROWED" }.sumOf(balance)
             val combinedTotal = lentTotal + borrowedTotal
-            Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
-                shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+            Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+                shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -535,7 +585,7 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
                     Text(amountInWords(combinedTotal), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("You lent · ${money(lentTotal)}",
-                        style = MaterialTheme.typography.bodySmall, color = Color(0xFF126B55))
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text("You borrowed · ${money(borrowedTotal)}",
                         style = MaterialTheme.typography.bodySmall, color = Color(0xFF4C86D9))
                     Text("Total = outstanding balances of this person's unique loan records, split by each record's Lent/Borrowed type.",
@@ -643,7 +693,7 @@ private fun StatisticsScreen(
         }
         GlassPanel(title = "Stacked column chart · amortization estimate", subtitle = "Estimated principal vs interest allocation over the last 6 months") {
             StackedPaymentChart(stackedPayments)
-            Text("Estimate only: recorded payments are allocated to accrued interest first, then principal. Lendora does not store the actual split supplied by the lender.",
+            Text("Estimate only: recorded payments are allocated to accrued interest first, then principal. FundNiti does not store the actual split supplied by the lender.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         GlassPanel(title = "Line chart · outstanding balance", subtitle = "Reconstructed month-end balance over the last 6 months") {
@@ -682,9 +732,9 @@ private fun StatisticsScreen(
         DataNeededPanel("Box plot · credit scores and risk-tier rates",
             "Needs credit scores and risk tiers. The app currently stores neither, so this distribution cannot be calculated.")
         DataNeededPanel("Funnel chart · application pipeline",
-            "Needs inquiry, application, approval, rejection and disbursement stages. Lendora currently records loans after creation.")
+            "Needs inquiry, application, approval, rejection and disbursement stages. FundNiti currently records loans after creation.")
         DataNeededPanel("Geographic heatmap · regional risk",
-            "Needs borrower location and regional delinquency data. Lendora does not collect location data.")
+            "Needs borrower location and regional delinquency data. FundNiti does not collect location data.")
         Text("Key metrics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Original principal", money(principal), Modifier.weight(1f))
@@ -704,9 +754,9 @@ private fun StatisticsScreen(
 @Composable
 private fun GlassPanel(title: String, subtitle: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(24.dp)),
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -791,8 +841,8 @@ private fun PaymentBars(data: List<Pair<String, Double>>) {
 
 @Composable
 private fun DataNeededPanel(title: String, description: String) {
-    Card(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
-        shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7FAF8))) {
+    Card(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Filled.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -953,8 +1003,8 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your data stays on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text("No login, cloud database, or external server. Back up all records to the Android folder in one tap, recover a saved device snapshot, or export an encrypted backup file.")
-        Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
-            shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+            shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -983,14 +1033,14 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
             }
         }
         Spacer(Modifier.height(8.dp))
-        Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFD5E8DF), RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7FBF9)),
+        Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Icon(Icons.Filled.AccountBalance, contentDescription = null, tint = Color(0xFF126B55), modifier = Modifier.size(30.dp))
                     Column {
-                        Text("About Lendora", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("About FundNiti", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("Personal lending, clearly organised", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -999,7 +1049,7 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
                 Text("Simple interest on the original principal at the fixed monthly rate. Full monthly anniversary periods receive the full monthly rate; partial periods are prorated by elapsed calendar days divided by the actual days in that monthly period. Recorded payments are deducted from accrued interest plus principal in the displayed outstanding balance.", style = MaterialTheme.typography.bodySmall)
                 Text("Privacy by design", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("No account, external server, or cloud sync is required. Lendora keeps a portable JSON snapshot in Android/media/com.rath0darya.loanmanager/Lendora/backup and restores it on a fresh install when the local database is empty. This automatic snapshot is not encrypted so reinstalling can read it; protect the file because it contains financial records. Manual encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
-                Text("Lendora · Native Android · Kotlin + Jetpack Compose · Version 1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("FundNiti · Native Android · Kotlin + Jetpack Compose · Version 1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1125,9 +1175,9 @@ private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, String) -> Uni
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
     Card(
-        modifier = modifier.border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+        modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1146,8 +1196,8 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 
 @Composable
 private fun EmptyState(title: String, message: String) {
-    Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+    Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Filled.AccountBalance, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
