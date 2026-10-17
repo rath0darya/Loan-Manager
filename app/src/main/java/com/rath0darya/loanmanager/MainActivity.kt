@@ -1225,10 +1225,10 @@ private fun formatDate(time: Long): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(Date(time))
 
 /**
- * Fixed monthly interest based on calendar-month anniversaries. Each completed calendar
- * month earns one full monthly amount regardless of whether it has 28, 29, 30, or 31 days.
- * Only an incomplete calendar period is prorated by the actual days in that period.
- * A loan from 27 Jun 2026 to 27 Jun 2027 therefore accrues 12 full monthly charges.
+ * Simple interest using calendar-month anniversaries for completed periods.
+ * Each completed month earns one full monthly interest amount. Remaining days
+ * accrue at monthlyInterest * 12 / 365 or 366, according to each day's calendar year.
+ * Example: 27 Jun 2026 to 27 Jun 2027 earns 12 full monthly charges.
  */
 private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis: Long, endMillis: Long): Double {
     if (principal <= 0.0 || monthlyRate <= 0.0 || endMillis <= startMillis) return 0.0
@@ -1243,24 +1243,23 @@ private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis:
     val monthlyInterest = BigDecimal.valueOf(principal)
         .multiply(BigDecimal.valueOf(monthlyRate))
         .divide(hundred, scale, rounding)
+
     var completedPeriods = 0L
     while (!start.plusMonths(completedPeriods + 1).isAfter(end)) completedPeriods++
     var interest = monthlyInterest.multiply(BigDecimal.valueOf(completedPeriods))
-    val periodStart = start.plusMonths(completedPeriods)
-    if (periodStart.isBefore(end)) {
-        val periodEnd = start.plusMonths(completedPeriods + 1)
-        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, end)
-        val periodDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd)
-        if (periodDays > 0L) {
-            val partial = monthlyInterest.multiply(BigDecimal.valueOf(elapsedDays))
-                .divide(BigDecimal.valueOf(periodDays), scale, rounding)
-            interest = interest.add(partial)
-        }
+
+    // Only the remaining incomplete monthly period uses the annual daily rate.
+    var day = start.plusMonths(completedPeriods)
+    while (day.isBefore(end)) {
+        val daysInYear = if (day.isLeapYear) 366L else 365L
+        val dailyInterest = monthlyInterest.multiply(BigDecimal.valueOf(12L))
+            .divide(BigDecimal.valueOf(daysInYear), scale, rounding)
+        interest = interest.add(dailyInterest)
+        day = day.plusDays(1)
     }
-    // Round the accrued interest to the nearest paise, half up.
+
     return interest.setScale(2, rounding).toDouble().coerceAtLeast(0.0)
 }
-
 private fun elapsedLoanDays(startMillis: Long, endMillis: Long): Long {
     val zone = ZoneId.systemDefault()
     val start = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
