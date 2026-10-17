@@ -3,6 +3,7 @@ package com.rath0darya.loanmanager
 import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
@@ -25,8 +26,8 @@ data class LoanEntity(
     val startDate: Long,
     val dueDate: Long?,
     val note: String = "",
-    val personName2: String = "",
-    val personName3: String = ""
+    @ColumnInfo(defaultValue = "''") val personName2: String = "",
+    @ColumnInfo(defaultValue = "''") val personName3: String = ""
 )
 
 @Entity(tableName = "payments", indices = [Index("loanId")])
@@ -36,8 +37,8 @@ data class PaymentEntity(
     val amount: Double,
     val paidAt: Long,
     val note: String = "",
-    val paymentMethod: String = "Cash",
-    val referenceNumber: String = ""
+    @ColumnInfo(defaultValue = "'Cash'") val paymentMethod: String = "Cash",
+    @ColumnInfo(defaultValue = "''") val referenceNumber: String = ""
 )
 
 @Dao
