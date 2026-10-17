@@ -497,6 +497,8 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Combined outstanding across ${records.size} loan(s): ${money(combinedTotal)}",
                         style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(amountInWords(combinedTotal), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("You lent · ${money(lentTotal)}",
                         style = MaterialTheme.typography.bodySmall, color = Color(0xFF126B55))
                     Text("You borrowed · ${money(borrowedTotal)}",
