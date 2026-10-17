@@ -25,7 +25,8 @@ data class LoanEntity(
     val startDate: Long,
     val dueDate: Long?,
     val note: String = "",
-    val personName2: String = ""
+    val personName2: String = "",
+    val personName3: String = ""
 )
 
 @Entity(tableName = "payments", indices = [Index("loanId")])
@@ -34,7 +35,9 @@ data class PaymentEntity(
     val loanId: Long,
     val amount: Double,
     val paidAt: Long,
-    val note: String = ""
+    val note: String = "",
+    val paymentMethod: String = "Cash",
+    val referenceNumber: String = ""
 )
 
 @Dao
@@ -73,7 +76,7 @@ interface LoanDao {
     suspend fun deleteLoan(loanId: Long)
 }
 
-@Database(entities = [LoanEntity::class, PaymentEntity::class], version = 2, exportSchema = false)
+@Database(entities = [LoanEntity::class, PaymentEntity::class], version = 3, exportSchema = false)
 abstract class LoanDatabase : RoomDatabase() {
     abstract fun loanDao(): LoanDao
 
@@ -81,6 +84,14 @@ abstract class LoanDatabase : RoomDatabase() {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE loans ADD COLUMN personName2 TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE loans ADD COLUMN personName3 TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE payments ADD COLUMN paymentMethod TEXT NOT NULL DEFAULT 'Cash'")
+                database.execSQL("ALTER TABLE payments ADD COLUMN referenceNumber TEXT NOT NULL DEFAULT ''")
             }
         }
 
@@ -92,7 +103,7 @@ abstract class LoanDatabase : RoomDatabase() {
                     context.applicationContext,
                     LoanDatabase::class.java,
                     "loan_manager.db"
-                ).addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
             }
     }
 }
