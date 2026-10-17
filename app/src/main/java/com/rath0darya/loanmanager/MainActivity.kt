@@ -205,6 +205,10 @@ private fun LoanManagerApp() {
         }
     }
 
+    LaunchedEffect(Unit) {
+        runCatching { EncryptedBackup.writeAutomatic(context, createBackupJson(dao)) }
+    }
+
     val paymentTotals = payments.groupBy { it.loanId }.mapValues { (_, list) -> list.sumOf { it.amount } }
     fun balance(loan: LoanEntity): Double {
         val months = completedMonths(loan.startDate, System.currentTimeMillis())
@@ -671,7 +675,7 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
                 Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Choose backup file") }
             }
         }
-        Text("Local backup folder: Android/data/com.rath0darya.loanmanager/files/Lendora/backup. The encrypted backup key is stored in Android Keystore, so this automatic backup is intended for this app installation/device. Export a copy before changing phones or reinstalling.",
+        Text("Local backup folder: Android/media/com.rath0darya.loanmanager/Lendora/backup. The encrypted backup key is stored in Android Keystore, so these encrypted files are tied to this app installation/device. Keep this app installed to restore them.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
