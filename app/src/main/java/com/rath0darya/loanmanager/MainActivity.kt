@@ -89,6 +89,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.DateFormat
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.Date
 import java.util.Locale
 import java.time.Instant
@@ -366,6 +368,8 @@ private fun DashboardScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(money(outstanding), color = androidx.compose.ui.graphics.Color.White,
                         style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text(amountInWords(outstanding), color = Color(0xFFDDF5E9),
+                        style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.height(8.dp))
                     Text("${loans.size} active loan records", color = androidx.compose.ui.graphics.Color.White)
                 }
@@ -433,7 +437,11 @@ private fun LoanCard(
                     Text(if (loan.direction == "LENT") "You lent" else "You borrowed",
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
-                Text(money(balance), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(150.dp)) {
+                    Text(money(balance), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(amountInWords(balance), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
@@ -684,7 +692,7 @@ private fun LoanDialog(
     var name1 by remember(existing?.id) { mutableStateOf(existing?.personName ?: "") }
     var name2 by remember(existing?.id) { mutableStateOf(existing?.personName2 ?: "") }
     var direction by remember(existing?.id) { mutableStateOf(existing?.direction ?: "LENT") }
-    var principal by remember(existing?.id) { mutableStateOf(existing?.principal?.toString() ?: "") }
+    var principal by remember(existing?.id) { mutableStateOf(existing?.principal?.let(::amountInputFormat) ?: "") }
     var rate by remember(existing?.id) { mutableStateOf(existing?.monthlyRate?.toString() ?: "") }
     var startDateText by remember(existing?.id) {
         mutableStateOf(existing?.startDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toString() } ?: LocalDate.now().toString())
@@ -693,7 +701,7 @@ private fun LoanDialog(
         mutableStateOf(existing?.dueDate?.let { ((it - System.currentTimeMillis()) / 86_400_000L).coerceAtLeast(0).toString() } ?: "30")
     }
     var note by remember(existing?.id) { mutableStateOf(existing?.note ?: "") }
-    val amount = principal.toDoubleOrNull()
+    val amount = parseAmount(principal)
     val interest = rate.toDoubleOrNull()
     val parsedDate = runCatching { LocalDate.parse(startDateText) }.getOrNull()
     val validStartDate = parsedDate != null && !parsedDate.isAfter(LocalDate.now())
@@ -719,7 +727,13 @@ private fun LoanDialog(
                     androidx.compose.material3.FilterChip(selected = direction == "LENT", onClick = { direction = "LENT" }, label = { Text("I lent") })
                     androidx.compose.material3.FilterChip(selected = direction == "BORROWED", onClick = { direction = "BORROWED" }, label = { Text("I borrowed") })
                 }
-                OutlinedTextField(principal, { principal = it }, label = { Text("Principal amount (₹)") }, singleLine = true)
+                OutlinedTextField(
+                    value = principal,
+                    onValueChange = { principal = amountInputFormat(it) },
+                    label = { Text("Principal amount (₹)") },
+                    supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
+                    singleLine = true
+                )
                 OutlinedTextField(rate, { rate = it }, label = { Text("Fixed interest (% per month)") }, singleLine = true)
                 OutlinedTextField(
                     value = startDateText,
@@ -761,13 +775,19 @@ private fun LoanDialog(
 private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
     var amountText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    val amount = amountText.toDoubleOrNull()
+    val amount = parseAmount(amountText)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Record payment") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(amountText, { amountText = it }, label = { Text("Payment amount (₹)") }, singleLine = true)
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = amountInputFormat(it) },
+                    label = { Text("Payment amount (₹)") },
+                    supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
+                    singleLine = true
+                )
                 OutlinedTextField(note, { note = it }, label = { Text("Note / receipt reference (optional)") })
             }
         },
@@ -791,6 +811,10 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
+            value.replace("₹", "").replace(",", "").toDoubleOrNull()?.let { amount ->
+                Text(amountInWords(amount), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            }
         }
     }
 }
@@ -809,8 +833,68 @@ private fun EmptyState(title: String, message: String) {
     }
 }
 
-private fun money(value: Double): String =
-    java.text.NumberFormat.getCurrencyInstance(Locale("en", "IN")).format(value)
+private fun money(value: Double): String {
+    val symbols = DecimalFormatSymbols(Locale("en", "IN")).apply {
+        groupingSeparator = ','
+        decimalSeparator = '.'
+        currencySymbol = "₹"
+    }
+    return DecimalFormat("₹#,##,##0.00", symbols).format(value.coerceAtLeast(0.0))
+}
+
+private fun parseAmount(text: String): Double? =
+    text.replace(",", "").replace("₹", "").trim().toDoubleOrNull()
+
+/** Formats editable amounts with Indian grouping, e.g. 1,23,456.78. */
+private fun amountInputFormat(raw: String): String {
+    val cleaned = raw.filter { it.isDigit() || it == '.' }
+    val dot = cleaned.indexOf('.')
+    val integerPart = (if (dot >= 0) cleaned.substring(0, dot) else cleaned)
+        .trimStart('0').ifEmpty { if (cleaned.startsWith("0")) "0" else "" }
+    val decimalPart = if (dot >= 0) "." + cleaned.substring(dot + 1).filter(Char::isDigit).take(2) else ""
+    val grouped = if (integerPart.length <= 3) integerPart else {
+        val lastThree = integerPart.takeLast(3)
+        val leading = integerPart.dropLast(3).reversed().chunked(2)
+            .joinToString(",") { it }.reversed()
+        "$leading,$lastThree"
+    }
+    return grouped + decimalPart
+}
+
+private fun amountInWords(value: Double): String {
+    val totalPaise = (value.coerceAtLeast(0.0) * 100.0).toLong()
+    val rupees = totalPaise / 100
+    val paise = totalPaise % 100
+    val rupeeWords = indianNumberWords(rupees)
+    val paiseWords = if (paise > 0) " and ${indianNumberWords(paise)} Paise" else ""
+    return "$rupeeWords Rupees$paiseWords Only"
+}
+
+private fun indianNumberWords(number: Long): String {
+    if (number == 0L) return "Zero"
+    val ones = arrayOf("", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+        "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
+        "Eighteen", "Nineteen")
+    val tens = arrayOf("", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety")
+    fun underThousand(n: Int): String {
+        var v = n
+        val parts = mutableListOf<String>()
+        if (v >= 100) { parts += ones[v / 100] + " Hundred"; v %= 100 }
+        if (v >= 20) { parts += tens[v / 10]; v %= 10 }
+        if (v in 1..19) parts += ones[v]
+        return parts.joinToString(" ")
+    }
+    var n = number
+    val parts = mutableListOf<String>()
+    val crore = n / 10_000_000
+    if (crore > 0) { parts += indianNumberWords(crore) + " Crore"; n %= 10_000_000 }
+    val lakh = n / 100_000
+    if (lakh > 0) { parts += underThousand(lakh.toInt()) + " Lakh"; n %= 100_000 }
+    val thousand = n / 1_000
+    if (thousand > 0) { parts += underThousand(thousand.toInt()) + " Thousand"; n %= 1_000 }
+    if (n > 0) parts += underThousand(n.toInt())
+    return parts.joinToString(" ")
+}
 
 private fun formatDate(time: Long): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(Date(time))
