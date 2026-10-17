@@ -73,6 +73,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -1311,41 +1314,110 @@ private fun AppLockSettings(
 @Composable
 private fun PinUnlockDialog(
     fingerprintEnabled: Boolean,
+    fingerprintFailures: Int,
     onUnlock: (String) -> Boolean,
+    onFingerprintFailureCount: (Int) -> Unit,
     onFingerprint: () -> Unit
 ) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text("Unlock FundNiti") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Enter your 6-digit PIN to open your loan records.")
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { if (it.all(Char::isDigit) && it.length <= 6) pin = it; error = "" },
-                    label = { Text("6-digit PIN") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true
-                )
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                if (fingerprintEnabled) {
-                    TextButton(onClick = onFingerprint, modifier = Modifier.fillMaxWidth()) {
-                        Text("Unlock with fingerprint")
+    val pinFocus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val showPin = fingerprintFailures >= 1
+    LaunchedEffect(Unit) {
+        if (fingerprintEnabled) onFingerprint()
+    }
+    LaunchedEffect(fingerprintFailures) {
+        if (fingerprintFailures >= 3) {
+            pinFocus.requestFocus()
+            keyboard?.show()
+        }
+    }
+    LaunchedEffect(pin) {
+        if (pin.length == 6) {
+            if (onUnlock(pin)) {
+                error = ""
+                pin = ""
+                onFingerprintFailureCount(0)
+            } else {
+                pin = ""
+                error = "That PIN is not correct. Try again."
+            }
+        }
+    }
+    Dialog(onDismissRequest = {}) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(30.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            shadowElevation = 18.dp
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(76.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Filled.AccountBalance, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(34.dp))
                     }
                 }
+                Text("Welcome back", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("FundNiti is locked", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    if (fingerprintEnabled && fingerprintFailures < 3) "Use your fingerprint to open your private loan records." else "Enter your 6-digit PIN to continue.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                if (showPin) {
+                    OutlinedTextField(
+                        value = pin,
+                        onValueChange = { value ->
+                            if (value.all(Char::isDigit) && value.length <= 6) {
+                                pin = value
+                                error = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().focusRequester(pinFocus),
+                        label = { Text("6-digit PIN") },
+                        placeholder = { Text("••••••") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    if (error.isNotBlank()) {
+                        Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    }
+                    Text("Your PIN is checked automatically when you enter the last digit.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+                if (fingerprintEnabled) {
+                    Button(
+                        onClick = {
+                            error = ""
+                            onFingerprint()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("Try fingerprint again")
+                    }
+                }
+                if (!showPin && fingerprintEnabled) {
+                    Text("If fingerprint does not work, choose Use PIN on the fingerprint prompt.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
+                if (showPin && !fingerprintEnabled) {
+                    Text("Enter your PIN above. No extra button is needed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                }
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                if (pin.length != 6) error = "Enter all 6 digits."
-                else if (onUnlock(pin)) { pin = ""; error = "" }
-                else { pin = ""; error = "Wrong PIN. Try again." }
-            }, enabled = pin.length == 6) { Text("Unlock") }
         }
-    )
+    }
 }
 
 @Composable
