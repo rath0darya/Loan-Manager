@@ -259,7 +259,7 @@ private fun LoanManagerApp() {
                     monthlyInterest, ::balance, { page = AppPage.Loans }
                 )
                 AppPage.Loans -> LoansScreen(
-                    Modifier.padding(padding), loans, ::balance, search, { search = it },
+                    Modifier.padding(padding), loans, ::balance, paymentTotals, search, { search = it },
                     onAddPayment = { paymentFor = it },
                     onDelete = { loan -> scope.launch {
                         dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
@@ -360,7 +360,7 @@ private fun DashboardScreen(
 @Composable
 private fun LoansScreen(
     modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double,
-    search: String, onSearch: (String) -> Unit, onAddPayment: (LoanEntity) -> Unit,
+    paymentTotals: Map<Long, Double>, search: String, onSearch: (String) -> Unit, onAddPayment: (LoanEntity) -> Unit,
     onDelete: (LoanEntity) -> Unit
 ) {
     val filtered = loans.filter {
@@ -376,7 +376,7 @@ private fun LoansScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
             if (filtered.isEmpty()) item { EmptyState("Nothing found", "Add a loan or try another search.") }
             items(filtered, key = { it.id }) { loan ->
-                LoanCard(loan, balance(loan), 0.0, { onAddPayment(loan) }, { onDelete(loan) })
+                LoanCard(loan, balance(loan), paymentTotals[loan.id] ?: 0.0, { onAddPayment(loan) }, { onDelete(loan) })
             }
             item { Spacer(Modifier.height(72.dp)) }
         }
@@ -401,6 +401,7 @@ private fun LoanCard(
                 Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
                 Text("${loan.monthlyRate}% / month", style = MaterialTheme.typography.bodySmall)
             }
+            if (paid > 0.0) Text("Paid so far: ${money(paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             if (loan.note.isNotBlank()) Text(loan.note, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Started ${formatDate(loan.startDate)}", style = MaterialTheme.typography.labelSmall,
