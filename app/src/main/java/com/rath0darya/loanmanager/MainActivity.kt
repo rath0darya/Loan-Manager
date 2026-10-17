@@ -95,7 +95,6 @@ import java.util.Date
 import java.util.Locale
 import java.time.Instant
 import java.time.LocalDate
-import java.time.Period
 import java.time.ZoneId
 
 private enum class AppPage(val label: String, val icon: ImageVector) {
@@ -211,8 +210,7 @@ private fun LoanManagerApp() {
 
     val paymentTotals = payments.groupBy { it.loanId }.mapValues { (_, list) -> list.sumOf { it.amount } }
     fun balance(loan: LoanEntity): Double {
-        val months = completedMonths(loan.startDate, System.currentTimeMillis())
-        val interest = loan.principal * loan.monthlyRate / 100.0 * months
+        val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
         return (loan.principal + interest - (paymentTotals[loan.id] ?: 0.0)).coerceAtLeast(0.0)
     }
     val totalOutstanding = loans.sumOf { balance(it) }
@@ -441,14 +439,14 @@ private fun LoanCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
             }
-            val interestMonths = completedMonths(loan.startDate, System.currentTimeMillis())
-            val interestAmount = loan.principal * loan.monthlyRate / 100.0 * interestMonths
+            val elapsedDays = elapsedLoanDays(loan.startDate, System.currentTimeMillis())
+            val interestAmount = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
                     Text("Rate: ${loan.monthlyRate}% / month", style = MaterialTheme.typography.bodySmall)
                 }
-                Text("Interest accrued (${interestMonths} month(s)): ${money(interestAmount)}",
+                Text("Interest accrued (${elapsedDays} days · daily prorated): ${money(interestAmount)}",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             if (paid > 0.0) Text("Paid so far: ${money(paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -540,7 +538,7 @@ private fun StatisticsScreen(
     val balanceTrend = recentMonths.map { month ->
         val cutoff = endOfMonth(month)
         val value = loans.filter { it.startDate <= cutoff }.sumOf { loan ->
-            val interest = loan.principal * loan.monthlyRate / 100.0 * completedMonths(loan.startDate, cutoff)
+            val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, cutoff)
             val paid = payments.filter { it.loanId == loan.id && it.paidAt <= cutoff }.sumOf { it.amount }
             (loan.principal + interest - paid).coerceAtLeast(0.0)
         }
@@ -553,8 +551,7 @@ private fun StatisticsScreen(
     loans.forEach { loan ->
         var interestAlreadyPaid = 0.0
         payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }.forEach { payment ->
-            val interestAccrued = loan.principal * loan.monthlyRate / 100.0 *
-                completedMonths(loan.startDate, payment.paidAt)
+            val interestAccrued = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, payment.paidAt)
             val interestDue = (interestAccrued - interestAlreadyPaid).coerceAtLeast(0.0)
             val interestPart = kotlin.math.min(payment.amount, interestDue)
             val principalPart = (payment.amount - interestPart).coerceAtLeast(0.0)
@@ -939,6 +936,26 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
         }
         Text("Local backup folder: Android/media/com.rath0darya.loanmanager/Lendora/backup. The encrypted backup key is stored in Android Keystore, so these encrypted files are tied to this app installation/device. Keep this app installed to restore them.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFD5E8DF), RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7FBF9)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Filled.AccountBalance, contentDescription = null, tint = Color(0xFF126B55), modifier = Modifier.size(30.dp))
+                    Column {
+                        Text("About Lendora", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Personal lending, clearly organised", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Text("Lendora is an offline-first loan ledger for tracking money lent and borrowed, people, repayments, due dates and portfolio trends. Your records are stored locally on this device.", style = MaterialTheme.typography.bodyMedium)
+                Text("Interest method", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("Simple interest on the original principal at the fixed monthly rate. Full monthly anniversary periods receive the full monthly rate; partial periods are prorated by elapsed calendar days divided by the actual days in that monthly period. Recorded payments are deducted from accrued interest plus principal in the displayed outstanding balance.", style = MaterialTheme.typography.bodySmall)
+                Text("Privacy by design", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text("No account, external server, or cloud sync is required. Keep regular backups. Encrypted exports use this installation Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
+                Text("Lendora · Native Android · Kotlin + Jetpack Compose · Version 1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
@@ -1161,10 +1178,29 @@ private fun indianNumberWords(number: Long): String {
 private fun formatDate(time: Long): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(Date(time))
 
-private fun completedMonths(startMillis: Long, endMillis: Long): Long {
+private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis: Long, endMillis: Long): Double {
+    if (principal <= 0.0 || monthlyRate <= 0.0 || endMillis <= startMillis) return 0.0
     val zone = ZoneId.systemDefault()
     val start = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
     val end = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
-    if (end.isBefore(start)) return 0
-    return Period.between(start, end).toTotalMonths().coerceAtLeast(0)
+    if (end.isBefore(start)) return 0.0
+    val monthlyInterest = principal * monthlyRate / 100.0
+    var completedPeriods = 0L
+    while (!start.plusMonths(completedPeriods + 1).isAfter(end)) completedPeriods++
+    var interest = monthlyInterest * completedPeriods
+    val periodStart = start.plusMonths(completedPeriods)
+    if (periodStart.isBefore(end)) {
+        val periodEnd = start.plusMonths(completedPeriods + 1)
+        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, end).toDouble()
+        val periodDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd).toDouble()
+        if (periodDays > 0.0) interest += monthlyInterest * elapsedDays / periodDays
+    }
+    return interest.coerceAtLeast(0.0)
+}
+
+private fun elapsedLoanDays(startMillis: Long, endMillis: Long): Long {
+    val zone = ZoneId.systemDefault()
+    val start = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
+    val end = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
+    return java.time.temporal.ChronoUnit.DAYS.between(start, end).coerceAtLeast(0)
 }
