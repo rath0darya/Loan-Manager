@@ -559,13 +559,13 @@ private fun StatisticsScreen(
             val interestPart = kotlin.math.min(payment.amount, interestDue)
             val principalPart = (payment.amount - interestPart).coerceAtLeast(0.0)
             interestAlreadyPaid += interestPart
-            val monthKey = Instant.ofEpochMilli(payment.paidAt).atZone(ZoneId.systemDefault()).month.name.take(3)
+            val monthKey = Instant.ofEpochMilli(payment.paidAt).atZone(ZoneId.systemDefault()).let { java.time.YearMonth.of(it.year, it.monthValue).toString() }
             val prior = allocatedByMonth[monthKey] ?: (0.0 to 0.0)
             allocatedByMonth[monthKey] = (prior.first + principalPart) to (prior.second + interestPart)
         }
     }
     val stackedPayments = recentMonths.map { month ->
-        val split = allocatedByMonth[month.month.name.take(3)] ?: (0.0 to 0.0)
+        val split = allocatedByMonth[month.toString()] ?: (0.0 to 0.0)
         Triple(month.month.name.take(3), split.first, split.second)
     }
     val grouped = recentMonths.map { month ->
