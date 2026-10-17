@@ -544,7 +544,7 @@ private fun StatisticsScreen(
         }
         month.month.name.take(3) to value
     }
-    val currentCount = loans.count { balance(it) > 0 && (it.dueDate == null || it.dueDate >= System.currentTimeMillis()) }
+    val currentCount = loans.count { balance(it) > 0 && it.dueDate != null && it.dueDate >= System.currentTimeMillis() }
     val overdueCount = loans.count { balance(it) > 0 && it.dueDate != null && it.dueDate < System.currentTimeMillis() }
     val noDueDateCount = loans.count { balance(it) > 0 && it.dueDate == null }
     val allocatedByMonth = mutableMapOf<String, Pair<Double, Double>>()
@@ -952,7 +952,7 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
                 Text("Interest method", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("Simple interest on the original principal at the fixed monthly rate. Full monthly anniversary periods receive the full monthly rate; partial periods are prorated by elapsed calendar days divided by the actual days in that monthly period. Recorded payments are deducted from accrued interest plus principal in the displayed outstanding balance.", style = MaterialTheme.typography.bodySmall)
                 Text("Privacy by design", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text("No account, external server, or cloud sync is required. Keep regular backups. Encrypted exports use this installation Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
+                Text("No account, external server, or cloud sync is required. Keep regular backups. Encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
                 Text("Lendora · Native Android · Kotlin + Jetpack Compose · Version 1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
