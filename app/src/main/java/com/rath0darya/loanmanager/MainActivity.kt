@@ -835,6 +835,7 @@ private fun CalculatorsScreen(modifier: Modifier) {
 
 @Composable
 private fun InterestCalculatorCard() {
+    val context = LocalContext.current
     var principalText by remember { mutableStateOf("") }
     var rateText by remember { mutableStateOf("") }
     var monthsText by remember { mutableStateOf("1") }
@@ -882,9 +883,9 @@ private fun InterestCalculatorCard() {
                 androidx.compose.material3.Button(
                     onClick = {
                         shareCalculatorResult(
-                            LocalContext.current,
+                            context,
                             "Interest Calculator",
-                            "INTEREST CALCULATION RESULT\\nPrincipal: ${money(principal!!)}\\nMonthly interest rate: ${rateText}%\\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\\nInterest amount: ${money(interest)}\\nPrincipal + interest: ${money(principal + interest)}"
+                            "INTEREST CALCULATION RESULT\nPrincipal: ${money(principal!!)}\nMonthly interest rate: ${rateText}%\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\nInterest amount: ${money(interest)}\nPrincipal + interest: ${money(principal + interest)}"
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -977,7 +978,7 @@ private fun TenureCalculatorCard() {
                         shareCalculatorResult(
                             context,
                             "Tenure Calculator",
-                            "DATE DURATION RESULT\\nFrom: ${formatDate(fromDateMillis)}\\nTo: ${formatDate(toDateMillis)}\\nDuration: $totalMonths months, ${period.days} days\\nTotal days: $totalDays"
+                            "DATE DURATION RESULT\nFrom: ${formatDate(fromDateMillis)}\nTo: ${formatDate(toDateMillis)}\nDuration: $totalMonths months, ${period.days} days\nTotal days: $totalDays"
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -994,10 +995,10 @@ private fun TenureCalculatorCard() {
 
 private fun shareCalculatorResult(context: android.content.Context, title: String, result: String) {
     val shareText = buildString {
-        append("FundNiti • Personal lending, clearly organised\\n")
-        append("────────────────────────\\n")
+        append("FundNiti • Personal lending, clearly organised\n")
+        append("────────────────────────\n")
         append(result)
-        append("\\n\\nCalculated with FundNiti. For reference only; not a saved loan record.")
+        append("\n\nCalculated with FundNiti. For reference only; not a saved loan record.")
     }
     val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
         type = "text/plain"
