@@ -8,6 +8,9 @@ import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import kotlinx.coroutines.flow.Flow
@@ -21,7 +24,8 @@ data class LoanEntity(
     val monthlyRate: Double,
     val startDate: Long,
     val dueDate: Long?,
-    val note: String = ""
+    val note: String = "",
+    val personName2: String = ""
 )
 
 @Entity(tableName = "payments", indices = [Index("loanId")])
@@ -53,6 +57,9 @@ interface LoanDao {
     @Insert
     suspend fun addPayment(payment: PaymentEntity)
 
+    @Update
+    suspend fun updateLoan(loan: LoanEntity)
+
     @Query("DELETE FROM payments")
     suspend fun clearPayments()
 
@@ -66,11 +73,17 @@ interface LoanDao {
     suspend fun deleteLoan(loanId: Long)
 }
 
-@Database(entities = [LoanEntity::class, PaymentEntity::class], version = 1, exportSchema = false)
+@Database(entities = [LoanEntity::class, PaymentEntity::class], version = 2, exportSchema = false)
 abstract class LoanDatabase : RoomDatabase() {
     abstract fun loanDao(): LoanDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE loans ADD COLUMN personName2 TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         @Volatile private var INSTANCE: LoanDatabase? = null
 
         fun get(context: Context): LoanDatabase =
@@ -79,7 +92,7 @@ abstract class LoanDatabase : RoomDatabase() {
                     context.applicationContext,
                     LoanDatabase::class.java,
                     "loan_manager.db"
-                ).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
             }
     }
 }
