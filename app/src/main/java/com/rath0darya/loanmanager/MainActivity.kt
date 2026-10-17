@@ -86,6 +86,8 @@ import androidx.work.workDataOf
 import androidx.work.ExistingWorkPolicy
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.DateFormat
@@ -129,6 +131,7 @@ private fun LoanManagerApp() {
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
     var search by remember { mutableStateOf("") }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    var backupStatus by remember { mutableStateOf("Device backup will be checked automatically.") }
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
@@ -161,53 +164,43 @@ private fun LoanManagerApp() {
     ) { uri: Uri? ->
         if (uri != null) scope.launch {
             try {
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: error("Could not read the selected file")
-                val text = EncryptedBackup.decrypt(bytes)
-                val root = JSONObject(text)
-                val loanArray = root.getJSONArray("loans")
-                val paymentArray = root.getJSONArray("payments")
-                db.withTransaction {
-                    dao.clearPayments()
-                    dao.clearLoans()
-                    val ids = mutableMapOf<Long, Long>()
-                    for (i in 0 until loanArray.length()) {
-                        val o = loanArray.getJSONObject(i)
-                        val oldId = o.getLong("id")
-                        val due = o.opt("dueDate")
-                        val newId = dao.addLoan(LoanEntity(
-                            personName = o.getString("personName"),
-                            personName2 = o.optString("personName2", ""),
-                            direction = o.getString("direction"),
-                            principal = o.getDouble("principal"),
-                            monthlyRate = o.getDouble("monthlyRate"),
-                            startDate = o.getLong("startDate"),
-                            dueDate = if (due == null || due == JSONObject.NULL) null else (due as Number).toLong(),
-                            note = o.optString("note", "")
-                        ))
-                        ids[oldId] = newId
-                    }
-                    for (i in 0 until paymentArray.length()) {
-                        val o = paymentArray.getJSONObject(i)
-                        val newLoanId = ids[o.getLong("loanId")] ?: continue
-                        dao.addPayment(PaymentEntity(
-                            loanId = newLoanId,
-                            amount = o.getDouble("amount"),
-                            paidAt = o.getLong("paidAt"),
-                            note = o.optString("note", "")
-                        ))
-                    }
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?.let { EncryptedBackup.decrypt(it) }
+                        ?: error("Could not read the selected file")
                 }
-                EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
-                snackbarHostState.showSnackbar("Backup restored and local encrypted backup refreshed")
+                restoreBackupJson(db, dao, text)
+                withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
+                backupStatus = "Restored ${dao.allLoans().size} loans and ${dao.allPayments().size} repayments. Device backup refreshed."
+                snackbarHostState.showSnackbar("Backup restored and Android folder copy refreshed")
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Restore failed: ${e.localizedMessage ?: "invalid backup"}")
             }
         }
     }
 
+    // Recover the shared Android/media copy on a fresh installation before replacing it.
     LaunchedEffect(Unit) {
-        runCatching { EncryptedBackup.writeAutomatic(context, createBackupJson(dao)) }
+        try {
+            withContext(Dispatchers.IO) {
+                val existingLoans = dao.allLoans()
+                val existingPayments = dao.allPayments()
+                if (existingLoans.isEmpty() && existingPayments.isEmpty()) {
+                    val saved = DurableBackup.readAutomatic(context)
+                    if (saved != null) {
+                        restoreBackupJson(db, dao, saved)
+                        backupStatus = "Recovered ${dao.allLoans().size} loans and ${dao.allPayments().size} repayments from the Android folder."
+                    } else {
+                        backupStatus = "No existing Android folder backup was found yet."
+                    }
+                } else {
+                    backupStatus = "Found ${existingLoans.size} local loans and ${existingPayments.size} repayments."
+                }
+                DurableBackup.writeAutomatic(context, createBackupJson(dao))
+            }
+        } catch (e: Exception) {
+            backupStatus = "Device backup needs attention: ${e.localizedMessage ?: "storage unavailable"}"
+        }
     }
 
     val paymentTotals = payments.groupBy { it.loanId }.mapValues { (_, list) -> list.sumOf { it.amount } }
@@ -279,7 +272,7 @@ private fun LoanManagerApp() {
                     onEdit = { editLoan = it },
                     onDelete = { loan -> scope.launch {
                         dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
-                        EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
+                        DurableBackup.writeAutomatic(context, createBackupJson(dao))
                         snackbarHostState.showSnackbar("Loan deleted")
                     } }
                 )
@@ -289,6 +282,24 @@ private fun LoanManagerApp() {
                 )
                 AppPage.Backup -> BackupScreen(
                     Modifier.padding(padding),
+                    backupStatus = backupStatus,
+                    onBackupNow = {
+                        scope.launch {
+                            try {
+                                val result = withContext(Dispatchers.IO) {
+                                    val json = createBackupJson(dao)
+                                    val file = DurableBackup.writeAutomatic(context, json)
+                                    val root = JSONObject(json)
+                                    Triple(file.absolutePath, root.getJSONArray("loans").length(), root.getJSONArray("payments").length())
+                                }
+                                backupStatus = "Saved ${result.second} loans and ${result.third} repayments. File: ${result.first}"
+                                snackbarHostState.showSnackbar("All data backed up to the Android folder")
+                            } catch (e: Exception) {
+                                backupStatus = "Backup failed: ${e.localizedMessage ?: "storage unavailable"}"
+                                snackbarHostState.showSnackbar(backupStatus)
+                            }
+                        }
+                    },
                     onExport = { exportLauncher.launch("Lendora-Backup.lendora") },
                     onImport = { importLauncher.launch(arrayOf("application/octet-stream", "application/json", "text/*")) }
                 )
@@ -319,7 +330,7 @@ private fun LoanManagerApp() {
                         dao.updateLoan(savedLoan)
                         editing.id
                     }
-                    EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
+                    DurableBackup.writeAutomatic(context, createBackupJson(dao))
                     if (due != null) {
                         val delay = (due - System.currentTimeMillis()).coerceAtLeast(0L)
                         val request = OneTimeWorkRequestBuilder<LoanReminderWorker>()
@@ -342,7 +353,7 @@ private fun LoanManagerApp() {
             scope.launch {
                 dao.addPayment(PaymentEntity(loanId = loan.id, amount = amount,
                     paidAt = System.currentTimeMillis(), note = note.trim()))
-                EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
+                DurableBackup.writeAutomatic(context, createBackupJson(dao))
                 paymentFor = null
                 snackbarHostState.showSnackbar("Payment recorded")
             }
@@ -913,7 +924,7 @@ private fun shortMoney(value: Double): String = when {
 }
 
 @Composable
-private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () -> Unit) {
+private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: () -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your data stays on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -924,8 +935,9 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Back up records", style = MaterialTheme.typography.titleMedium)
-                Text("Automatically keeps an AES-GCM encrypted local backup. Exported .lendora backups are encrypted too.")
-                Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export backup") }
+                Text("One tap saves every loan and repayment to Android/media/com.rath0darya.loanmanager/Lendora/backup/Lendora-Data.json. On reinstall, Lendora checks this file and restores it automatically when the in-app database is empty.")
+                Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth()) { Text("Back up all data now") }
+                Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export encrypted backup file") }
             }
         }
         Card(Modifier.fillMaxWidth()) {
@@ -936,8 +948,14 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
                 Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Choose backup file") }
             }
         }
-        Text("Local backup folder: Android/media/com.rath0darya.loanmanager/Lendora/backup. The encrypted backup key is stored in Android Keystore, so these encrypted files are tied to this app installation/device. Keep this app installed to restore them.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Device backup status", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(backupStatus, style = MaterialTheme.typography.bodySmall)
+                Text("The automatic JSON copy is readable in your phone's file manager so it can survive app reinstall. It contains personal financial records; protect your phone and do not share this file. Android and file managers can still delete files—the app simply does not offer a delete-backup button.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Spacer(Modifier.height(8.dp))
         Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFD5E8DF), RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7FBF9)),
