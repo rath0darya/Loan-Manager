@@ -46,12 +46,15 @@ The monthly periods follow the loan's calendar-date anniversaries. Partial perio
 
 > Interest conventions differ between agreements and lenders. Confirm the method with the loan agreement before using the result as a settlement figure. Lendora is a tracking tool, not financial or legal advice.
 
-## 🔐 Privacy and backups
+## 🔐 Device storage, recovery and backups
 
-- Loan and repayment records are stored locally on the device using Room.
-- Automatic backups are written under Android/media/com.rath0darya.loanmanager/Lendora/backup.
-- Manual .lendora exports are encrypted using AES-GCM with a key held in Android Keystore.
-- **Important:** encrypted backups are tied to the app installation/device key. They generally cannot be restored after reinstalling the app or on another device. Keep the original installation available when restoring these encrypted files.
+- The Room database remains the app's working database. Android sandboxes app databases, so the app cannot safely promise an undeletable, shared, live database file with read-only permissions.
+- Lendora automatically mirrors all loans and repayments to a portable JSON snapshot at `Android/media/com.rath0darya.loanmanager/Lendora/backup/Lendora-Data.json`.
+- When Lendora is installed again and the new in-app database is empty, it checks this shared Android/media snapshot and restores the records automatically if the file is present and readable.
+- **One-tap backup:** open the Backup tab and tap **Back up all data now**. The app reads every loan and repayment, writes the snapshot to the phone folder, and displays the saved record counts and path in the app.
+- Manual `.lendora` exports remain AES-GCM encrypted using Android Keystore. Those encrypted exports are tied to the installation/device key and generally cannot be restored after reinstalling or on another device.
+- **Privacy note:** the automatic JSON snapshot is not encrypted, because a new installation must be able to read it without the old installation's Keystore key or a password. It contains sensitive financial records. Protect your device and do not share the file.
+- The app has no delete-backup button and does not request broad storage permission; however, Android or a user/file manager can still delete files. No app can guarantee a file is undeletable after uninstall, storage cleanup, or device failure. Keep a second copy in a location you control.
 
 ## 🛠️ Build from source
 
