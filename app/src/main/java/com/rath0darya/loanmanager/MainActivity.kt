@@ -26,6 +26,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +46,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Button
@@ -150,6 +154,7 @@ private enum class AppPage(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     Loans("Loans", Icons.Filled.AccountBalance),
     People("People", Icons.Filled.People),
+    Calculators("Calculators", Icons.Filled.Calculate),
     Statistics("Stats", Icons.Filled.BarChart),
     Backup("Backup", Icons.Filled.Settings)
 }
@@ -314,6 +319,7 @@ private fun LoanManagerApp() {
 
     MaterialTheme(colorScheme = appColorScheme, typography = modernTypography()) {
         Scaffold(
+            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
@@ -381,6 +387,7 @@ private fun LoanManagerApp() {
                     onEdit = { editLoan = it }, onDelete = { deleteConfirmLoan = it; confirmLoanDeleteFinal = false }
                 )
                 AppPage.People -> PeopleScreen(Modifier.padding(padding), loans, ::balance)
+                AppPage.Calculators -> CalculatorsScreen(Modifier.padding(padding))
                 AppPage.Statistics -> StatisticsScreen(
                     Modifier.padding(padding), loans, payments, ::balance, totalOutstanding, totalPrincipal
                 )
@@ -788,6 +795,159 @@ private fun LoanCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CalculatorsScreen(modifier: Modifier) {
+    var selected by remember { mutableStateOf("INTEREST") }
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Text("Loan calculators", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Both calculators use FundNiti's fixed monthly simple-interest rule: one full monthly interest amount per completed calendar month, then monthly interest ÷ 30 for each extra day.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            androidx.compose.material3.FilterChip(
+                selected = selected == "INTEREST",
+                onClick = { selected = "INTEREST" },
+                label = { Text("Interest Calculator") }
+            )
+            androidx.compose.material3.FilterChip(
+                selected = selected == "TENURE",
+                onClick = { selected = "TENURE" },
+                label = { Text("Tenure Calculator") }
+            )
+        }
+        if (selected == "INTEREST") InterestCalculatorCard() else TenureCalculatorCard()
+        Text(
+            "These are estimates only and do not change saved loan records.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun InterestCalculatorCard() {
+    var principalText by remember { mutableStateOf("") }
+    var rateText by remember { mutableStateOf("") }
+    var monthsText by remember { mutableStateOf("1") }
+    var daysText by remember { mutableStateOf("0") }
+    val principal = parseAmount(principalText)
+    val rate = rateText.replace(",", "").trim().toDoubleOrNull()
+    val months = monthsText.toLongOrNull()
+    val days = daysText.toLongOrNull()
+    val valid = principal != null && principal > 0 && rate != null && rate >= 0 &&
+        months != null && months >= 0 && months <= 12000 && days != null && days >= 0 && days <= 36500
+    val interest = if (valid) {
+        val start = LocalDate.now()
+        val end = start.plusMonths(months!!).plusDays(days!!)
+        accruedInterest(
+            principal!!, rate!!,
+            start.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            end.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        )
+    } else null
+    Card(
+        Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Interest Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            OutlinedTextField(principalText, { principalText = amountInputFormat(it) },
+                modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(rateText, { rateText = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
+                modifier = Modifier.fillMaxWidth(), label = { Text("Fixed monthly interest rate (%)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(monthsText, { monthsText = it.filter(Char::isDigit).take(5) },
+                    modifier = Modifier.weight(1f), label = { Text("Months") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                OutlinedTextField(daysText, { daysText = it.filter(Char::isDigit).take(5) },
+                    modifier = Modifier.weight(1f), label = { Text("Extra days") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+            }
+            if (interest != null) {
+                HorizontalResultLine("Interest amount", money(interest))
+                HorizontalResultLine("Principal + interest", money(principal!! + interest))
+                HorizontalResultLine("Duration", "${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days")
+            } else {
+                Text("Enter a positive principal, a non-negative rate, and a valid duration.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TenureCalculatorCard() {
+    var principalText by remember { mutableStateOf("") }
+    var rateText by remember { mutableStateOf("") }
+    var targetText by remember { mutableStateOf("") }
+    val principal = parseAmount(principalText)
+    val rate = rateText.replace(",", "").trim().toDoubleOrNull()
+    val targetInterest = parseAmount(targetText)
+    val valid = principal != null && principal > 0 && rate != null && rate > 0 &&
+        targetInterest != null && targetInterest >= 0
+    val tenure = if (valid) {
+        val monthlyInterest = principal!! * rate!! / 100.0
+        if (monthlyInterest > 0.0 && monthlyInterest.isFinite()) {
+            var fullMonths = kotlin.math.floor(targetInterest!! / monthlyInterest).toLong()
+            val remainder = (targetInterest - fullMonths * monthlyInterest).coerceAtLeast(0.0)
+            var extraDays = if (remainder <= 0.0000001) 0L else kotlin.math.ceil(remainder / (monthlyInterest / 30.0)).toLong()
+            if (extraDays >= 30) { fullMonths += extraDays / 30; extraDays %= 30 }
+            fullMonths to extraDays
+        } else null
+    } else null
+    Card(
+        Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Tenure Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Find how long it takes for interest to reach your target amount under the same fixed monthly rule.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(principalText, { principalText = amountInputFormat(it) },
+                modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(rateText, { rateText = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
+                modifier = Modifier.fillMaxWidth(), label = { Text("Fixed monthly interest rate (%)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            OutlinedTextField(targetText, { targetText = amountInputFormat(it) },
+                modifier = Modifier.fillMaxWidth(), label = { Text("Target interest amount (₹)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+            when {
+                valid && tenure != null -> {
+                    HorizontalResultLine("Estimated tenure", "${tenure.first} months, ${tenure.second} days")
+                    HorizontalResultLine("Target interest", money(targetInterest!!))
+                    HorizontalResultLine("Principal + target interest", money(principal!! + targetInterest))
+                    Text("Extra days are calculated at 1/30 of the monthly interest. Actual calendar month lengths can shift the exact anniversary date.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                valid -> Text("This rate is too large to calculate a reliable tenure.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                else -> Text("Enter a positive principal, a monthly rate greater than zero, and a non-negative target interest amount.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HorizontalResultLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(10.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary, textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 
