@@ -1,6 +1,8 @@
 package com.rath0darya.loanmanager
 
-import android.content.ContentValues
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
@@ -54,6 +56,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +70,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
+import androidx.core.content.ContextCompat
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
+import androidx.work.ExistingWorkPolicy
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -107,6 +116,16 @@ private fun LoanManagerApp() {
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
     var search by remember { mutableStateOf("") }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -265,12 +284,22 @@ private fun LoanManagerApp() {
     if (showAddLoan) {
         LoanDialog(onDismiss = { showAddLoan = false }, onSave = { person, direction, principal, rate, dueDays, note ->
             scope.launch {
-                dao.addLoan(LoanEntity(
+                val now = System.currentTimeMillis()
+                val due = if (dueDays > 0) now + dueDays * 86_400_000L else null
+                val newId = dao.addLoan(LoanEntity(
                     personName = person.trim(), direction = direction, principal = principal,
-                    monthlyRate = rate, startDate = System.currentTimeMillis(),
-                    dueDate = if (dueDays > 0) System.currentTimeMillis() + dueDays * 86_400_000L else null,
-                    note = note.trim()
+                    monthlyRate = rate, startDate = now, dueDate = due, note = note.trim()
                 ))
+                if (due != null) {
+                    val delay = (due - System.currentTimeMillis()).coerceAtLeast(0L)
+                    val request = OneTimeWorkRequestBuilder<LoanReminderWorker>()
+                        .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                        .setInputData(workDataOf("loanId" to newId, "personName" to person.trim()))
+                        .build()
+                    WorkManager.getInstance(context).enqueueUniqueWork(
+                        "loan_due_$newId", ExistingWorkPolicy.REPLACE, request
+                    )
+                }
                 showAddLoan = false
                 snackbarHostState.showSnackbar("Loan saved")
             }
@@ -401,7 +430,7 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${records.size} record(s) · Outstanding ${money(records.sumOf(balance)} )",
+                    Text("${records.size} record(s) · Outstanding ${money(records.sumOf(balance))}",
                         style = MaterialTheme.typography.bodyMedium)
                     Text("Lent: ${money(records.filter { it.direction == "LENT" }.sumOf(balance))}   Borrowed: ${money(records.filter { it.direction == "BORROWED" }.sumOf(balance))}",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
