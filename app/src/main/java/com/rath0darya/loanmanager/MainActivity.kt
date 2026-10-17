@@ -9,7 +9,6 @@ import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -63,6 +62,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -86,6 +86,13 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Switch
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
 import androidx.core.content.ContextCompat
@@ -118,7 +125,7 @@ private enum class AppPage(val label: String, val icon: ImageVector) {
     Backup("Backup", Icons.Filled.Settings)
 }
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { LoanManagerApp() }
@@ -131,6 +138,17 @@ private fun LoanManagerApp() {
     val context = LocalContext.current
     val preferences = remember { context.getSharedPreferences("fundniti_settings", android.content.Context.MODE_PRIVATE) }
     var themeMode by remember { mutableStateOf(preferences.getString("theme_mode", "SYSTEM") ?: "SYSTEM") }
+    var pinConfigured by remember { mutableStateOf(preferences.contains("pin_hash")) }
+    var appLocked by remember { mutableStateOf(preferences.contains("pin_hash")) }
+    var fingerprintEnabled by remember { mutableStateOf(preferences.getBoolean("fingerprint_enabled", true)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, pinConfigured) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && pinConfigured) appLocked = true
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val systemDark = isSystemInDarkTheme()
     val darkTheme = when (themeMode) {
         "LIGHT" -> false
@@ -336,6 +354,25 @@ private fun LoanManagerApp() {
                 )
                 AppPage.Backup -> BackupScreen(
                     Modifier.padding(padding),
+                    pinConfigured = pinConfigured,
+                    fingerprintEnabled = fingerprintEnabled,
+                    onSetPin = { pin ->
+                        val salt = java.util.UUID.randomUUID().toString()
+                        preferences.edit().putString("pin_salt", salt).putString("pin_hash", hashAppPin(pin, salt)).apply()
+                        pinConfigured = true
+                        appLocked = false
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                    },
+                    onDisablePin = {
+                        preferences.edit().remove("pin_hash").remove("pin_salt").putBoolean("fingerprint_enabled", false).apply()
+                        pinConfigured = false
+                        fingerprintEnabled = false
+                        appLocked = false
+                    },
+                    onFingerprintChange = { enabled ->
+                        fingerprintEnabled = enabled
+                        preferences.edit().putBoolean("fingerprint_enabled", enabled).apply()
+                    },
                     backupStatus = backupStatus,
                     onBackupNow = {
                         scope.launch {
@@ -486,6 +523,22 @@ private fun LoanManagerApp() {
                 }
             }) { Text("Yes, delete") } },
             dismissButton = { TextButton(onClick = { deleteConfirmLoan = null }) { Text("Cancel") } }
+        )
+    }
+    if (pinConfigured && appLocked) {
+        PinUnlockDialog(
+            fingerprintEnabled = fingerprintEnabled,
+            onUnlock = { pin ->
+                val salt = preferences.getString("pin_salt", "") ?: ""
+                val savedHash = preferences.getString("pin_hash", "") ?: ""
+                if (hashAppPin(pin, salt) == savedHash) { appLocked = false; true } else false
+            },
+            onFingerprint = {
+                val activity = context as? androidx.fragment.app.FragmentActivity
+                if (activity != null) requestFingerprintUnlock(activity, { appLocked = false }, { message ->
+                    scope.launch { snackbarHostState.showSnackbar(message) }
+                })
+            }
         )
     }
 }
@@ -1140,7 +1193,19 @@ private fun shortMoney(value: Double): String = when {
 }
 
 @Composable
-private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: () -> Unit, onRecoverDeviceBackup: () -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
+private fun BackupScreen(
+    modifier: Modifier,
+    pinConfigured: Boolean,
+    fingerprintEnabled: Boolean,
+    onSetPin: (String) -> Unit,
+    onDisablePin: () -> Unit,
+    onFingerprintChange: (Boolean) -> Unit,
+    backupStatus: String,
+    onBackupNow: () -> Unit,
+    onRecoverDeviceBackup: () -> Unit,
+    onExport: () -> Unit,
+    onImport: () -> Unit
+) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your data stays on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -1174,6 +1239,13 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        AppLockSettings(
+            pinConfigured = pinConfigured,
+            fingerprintEnabled = fingerprintEnabled,
+            onSetPin = onSetPin,
+            onDisablePin = onDisablePin,
+            onFingerprintChange = onFingerprintChange
+        )
         Spacer(Modifier.height(8.dp))
         Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
             shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
