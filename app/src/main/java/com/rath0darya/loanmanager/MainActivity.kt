@@ -483,7 +483,7 @@ private fun LoanCard(
                     Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
                     Text("Rate: ${loan.monthlyRate}% / month", style = MaterialTheme.typography.bodySmall)
                 }
-                Text("Interest accrued (${elapsedDays} days · daily prorated): ${money(interestAmount)}",
+                Text("Interest accrued (${elapsedDays} elapsed days · calendar-month based): ${money(interestAmount)}",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             if (paid > 0.0) Text("Paid so far: ${money(paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -1224,6 +1224,12 @@ private fun indianNumberWords(number: Long): String {
 private fun formatDate(time: Long): String =
     DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(Date(time))
 
+/**
+ * Fixed monthly interest based on calendar-month anniversaries. Each completed calendar
+ * month earns one full monthly amount regardless of whether it has 28, 29, 30, or 31 days.
+ * Only an incomplete calendar period is prorated by the actual days in that period.
+ * A loan from 27 Jun 2026 to 27 Jun 2027 therefore accrues 12 full monthly charges.
+ */
 private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis: Long, endMillis: Long): Double {
     if (principal <= 0.0 || monthlyRate <= 0.0 || endMillis <= startMillis) return 0.0
     val zone = ZoneId.systemDefault()
