@@ -121,6 +121,8 @@ import java.util.Locale
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.Period
+import java.time.temporal.ChronoUnit
 
 private fun modernTypography(): androidx.compose.material3.Typography {
     val base = androidx.compose.material3.Typography()
@@ -600,6 +602,12 @@ private fun LoanDetailsDialog(
 ) {
     val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
     val totalPaid = payments.sumOf { it.amount }
+    val loanStartDate = Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
+    val today = LocalDate.now()
+    val durationEndDate = if (today.isBefore(loanStartDate)) loanStartDate else today
+    val totalDays = ChronoUnit.DAYS.between(loanStartDate, durationEndDate)
+    val elapsedPeriod = Period.between(loanStartDate, durationEndDate)
+    val totalMonths = elapsedPeriod.years * 12 + elapsedPeriod.months
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Full loan report") },
@@ -611,6 +619,8 @@ private fun LoanDetailsDialog(
                 androidx.compose.material3.HorizontalDivider()
                 Text("Loan details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 DetailLine("Loan date", formatDate(loan.startDate))
+                DetailLine("Total Days", "$totalDays Days")
+                DetailLine("In Months", String.format(Locale.getDefault(), "%02d Months %02d Days", totalMonths, elapsedPeriod.days))
                 DetailLine("Original amount", money(loan.principal))
                 DetailLine("Interest rate", "${loan.monthlyRate}% per month")
                 DetailLine("Interest added so far", money(interest))
