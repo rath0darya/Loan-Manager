@@ -3,6 +3,7 @@ package com.rath0darya.loanmanager
 import android.Manifest
 import android.app.Activity
 import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
 import android.net.Uri
@@ -161,6 +162,8 @@ private fun LoanManagerApp() {
     var showAddLoan by remember { mutableStateOf(false) }
     var editLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
+    var detailLoan by remember { mutableStateOf<LoanEntity?>(null) }
+    var deleteConfirmLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var search by remember { mutableStateOf("") }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     var backupStatus by remember { mutableStateOf("Device backup will be checked automatically.") }
@@ -315,17 +318,12 @@ private fun LoanManagerApp() {
             when (page) {
                 AppPage.Home -> DashboardScreen(
                     Modifier.padding(padding), loans, totalOutstanding, totalPrincipal, totalPaid,
-                    monthlyInterest, ::balance, { page = AppPage.Loans }
+                    monthlyInterest, ::balance, { page = AppPage.Loans }, { detailLoan = it }, payments
                 )
                 AppPage.Loans -> LoansScreen(
                     Modifier.padding(padding), loans, ::balance, paymentTotals, search, { search = it },
-                    onAddPayment = { paymentFor = it },
-                    onEdit = { editLoan = it },
-                    onDelete = { loan -> scope.launch {
-                        dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
-                        DurableBackup.writeAutomatic(context, createBackupJson(dao))
-                        snackbarHostState.showSnackbar("Loan deleted")
-                    } }
+                    onAddPayment = { paymentFor = it }, onViewDetails = { detailLoan = it },
+                    onEdit = { editLoan = it }, onDelete = { deleteConfirmLoan = it }
                 )
                 AppPage.People -> PeopleScreen(Modifier.padding(padding), loans, ::balance)
                 AppPage.Statistics -> StatisticsScreen(
@@ -386,13 +384,14 @@ private fun LoanManagerApp() {
         LoanDialog(
             existing = editing,
             onDismiss = { showAddLoan = false; editLoan = null },
-            onSave = { person1, person2, direction, principal, rate, startDate, dueDays, note ->
+            onSave = { person1, person2, person3, direction, principal, rate, startDate, dueDays, note ->
                 scope.launch {
                     val due = if (dueDays > 0) System.currentTimeMillis() + dueDays * 86_400_000L else null
                     val savedLoan = LoanEntity(
                         id = editing?.id ?: 0L,
                         personName = person1.trim(),
                         personName2 = person2.trim(),
+                        personName3 = person3.trim(),
                         direction = direction,
                         principal = principal,
                         monthlyRate = rate,
@@ -409,7 +408,7 @@ private fun LoanManagerApp() {
                         val delay = (due - System.currentTimeMillis()).coerceAtLeast(0L)
                         val request = OneTimeWorkRequestBuilder<LoanReminderWorker>()
                             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                            .setInputData(workDataOf("loanId" to savedId, "personName" to listOf(person1.trim(), person2.trim()).filter { it.isNotBlank() }.joinToString(" & ")))
+                            .setInputData(workDataOf("loanId" to savedId, "personName" to listOf(person1.trim(), person2.trim(), person3.trim()).filter { it.isNotBlank() }.joinToString(" & ")))
                             .build()
                         WorkManager.getInstance(context).enqueueUniqueWork("loan_due_$savedId", ExistingWorkPolicy.REPLACE, request)
                     } else {
@@ -423,10 +422,10 @@ private fun LoanManagerApp() {
         )
     }
     paymentFor?.let { loan ->
-        PaymentDialog(onDismiss = { paymentFor = null }, onSave = { amount, note ->
+        PaymentDialog(onDismiss = { paymentFor = null }, onSave = { amount, paidAt, method, reference, note ->
             scope.launch {
                 dao.addPayment(PaymentEntity(loanId = loan.id, amount = amount,
-                    paidAt = System.currentTimeMillis(), note = note.trim()))
+                    paidAt = paidAt, note = note.trim(), paymentMethod = method, referenceNumber = reference.trim()))
                 DurableBackup.writeAutomatic(context, createBackupJson(dao))
                 paymentFor = null
                 snackbarHostState.showSnackbar("Payment recorded")
@@ -438,7 +437,8 @@ private fun LoanManagerApp() {
 @Composable
 private fun DashboardScreen(
     modifier: Modifier, loans: List<LoanEntity>, outstanding: Double, principal: Double,
-    paid: Double, monthlyInterest: Double, balance: (LoanEntity) -> Double, onViewLoans: () -> Unit
+    paid: Double, monthlyInterest: Double, balance: (LoanEntity) -> Double, onViewLoans: () -> Unit,
+    onViewDetails: (LoanEntity) -> Unit, payments: List<PaymentEntity>
 ) {
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Spacer(Modifier.height(4.dp)); Text("Your money, clearly tracked.", style = MaterialTheme.typography.bodyLarge) }
@@ -467,23 +467,24 @@ private fun DashboardScreen(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("Monthly interest", money(monthlyInterest), Modifier.weight(1f))
-                StatCard("People", loans.flatMap { listOf(it.personName, it.personName2) }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size.toString(), Modifier.weight(1f))
+                StatCard("People", loans.flatMap { listOf(it.personName, it.personName2, it.personName3) }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size.toString(), Modifier.weight(1f))
             }
         }
         item { Text("Recent loans", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         if (loans.isEmpty()) item { EmptyState("No loans yet", "Tap Loans, then + to add your first record.") }
-        items(loans.take(5), key = { it.id }) { loan -> LoanCard(loan, balance(loan), 0.0, {}, null, null) }
+        items(loans.take(5), key = { it.id }) { loan -> LoanCard(loan, balance(loan), payments.filter { it.loanId == loan.id }.sumOf { it.amount }, {}, null, null, { onViewDetails(loan) }) }
         item { Button(onClick = onViewLoans, modifier = Modifier.fillMaxWidth()) { Text("View all loans") } }
-        item { Text("Interest uses simple monthly interest on the original principal for each completed month.",
+        item { Text("Interest is worked out each month on the original amount.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("Developed with ♥️ Aravind", modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
 @Composable
 private fun LoansScreen(
     modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double,
-    paymentTotals: Map<Long, Double>, search: String, onSearch: (String) -> Unit, onAddPayment: (LoanEntity) -> Unit, onEdit: (LoanEntity) -> Unit,
-    onDelete: (LoanEntity) -> Unit
+    paymentTotals: Map<Long, Double>, search: String, onSearch: (String) -> Unit, onAddPayment: (LoanEntity) -> Unit,
+    onViewDetails: (LoanEntity) -> Unit, onEdit: (LoanEntity) -> Unit, onDelete: (LoanEntity) -> Unit
 ) {
     val filtered = loans.filter {
         (it.personName.contains(search, ignoreCase = true) || it.personName2.contains(search, ignoreCase = true)) ||
@@ -498,7 +499,7 @@ private fun LoansScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
             if (filtered.isEmpty()) item { EmptyState("Nothing found", "Add a loan or try another search.") }
             items(filtered, key = { it.id }) { loan ->
-                LoanCard(loan, balance(loan), paymentTotals[loan.id] ?: 0.0, { onAddPayment(loan) }, { onEdit(loan) }, { onDelete(loan) })
+                LoanCard(loan, balance(loan), paymentTotals[loan.id] ?: 0.0, { onAddPayment(loan) }, { onEdit(loan) }, { onDelete(loan) }, { onViewDetails(loan) })
             }
             item { Spacer(Modifier.height(72.dp)) }
         }
@@ -507,17 +508,18 @@ private fun LoansScreen(
 
 @Composable
 private fun LoanCard(
-    loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?
+    loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?, onViewDetails: (() -> Unit)? = null
 ) {
-    Card(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+    Card(onClick = { onViewDetails?.invoke() }, enabled = onViewDetails != null,
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(listOf(loan.personName, loan.personName2).filter { it.isNotBlank() }.joinToString(" & "), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(if (loan.direction == "LENT") "You lent" else "You borrowed",
+                    Text(listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → "), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(when (loan.direction) { "LENT" -> "You lent money"; "BORROWED_FOR_OTHER" -> "Borrowed for someone else"; else -> "You borrowed money" },
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
                 Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(150.dp)) {
@@ -533,7 +535,7 @@ private fun LoanCard(
                     Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
                     Text("Rate: ${loan.monthlyRate}% / month", style = MaterialTheme.typography.bodySmall)
                 }
-                Text("Interest accrued (${elapsedDays} elapsed days · calendar-month based): ${money(interestAmount)}",
+                Text("Interest added (${elapsedDays} days since loan started): ${money(interestAmount)}",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             if (paid > 0.0) Text("Paid so far: ${money(paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -560,7 +562,7 @@ private fun LoanCard(
 private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double) {
     // Normalize names so "Ravi", "ravi", and names with extra spaces merge into one person.
     val people = loans.flatMap { loan ->
-        listOf(loan.personName, loan.personName2)
+        listOf(loan.personName, loan.personName2, loan.personName3)
             .filter { it.isNotBlank() }
             .map { it.trim() to loan }
     }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it })
@@ -609,7 +611,7 @@ private fun StatisticsScreen(
     val monthlyInterest = loans.sumOf { it.principal * it.monthlyRate / 100.0 }
     val peopleCount = loans.flatMap { listOf(it.personName, it.personName2) }
         .filter { it.isNotBlank() }.map { it.trim().lowercase(Locale.ROOT) }.distinct().size
-    val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2)
+    val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2, loan.personName3)
         .filter { it.isNotBlank() }.map { it.trim() to loan } }
         .groupBy({ it.first.lowercase(Locale.ROOT) }, { it.second })
         .maxByOrNull { entry -> entry.value.distinctBy { it.id }.sumOf(balance) }
@@ -1059,11 +1061,12 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
 private fun LoanDialog(
     existing: LoanEntity? = null,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Double, Double, Long, Int, String) -> Unit
+    onSave: (String, String, String, String, Double, Double, Long, Int, String) -> Unit
 ) {
     val context = LocalContext.current
     var name1 by remember(existing?.id) { mutableStateOf(existing?.personName ?: "") }
     var name2 by remember(existing?.id) { mutableStateOf(existing?.personName2 ?: "") }
+    var name3 by remember(existing?.id) { mutableStateOf(existing?.personName3 ?: "") }
     var direction by remember(existing?.id) { mutableStateOf(existing?.direction ?: "LENT") }
     var principal by remember(existing?.id) { mutableStateOf(existing?.principal?.let { amountInputFormat(it.toString()) } ?: "") }
     var rate by remember(existing?.id) { mutableStateOf(existing?.monthlyRate?.toString() ?: "") }
@@ -1086,19 +1089,21 @@ private fun LoanDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     name1, { name1 = it },
-                    label = { Text(if (direction == "LENT") "Lent From" else "Borrower From") },
-                    supportingText = { Text(if (direction == "LENT") "Person or source the money was lent from" else "Person the money was borrowed from") },
+                    label = { Text(if (direction == "LENT") "Person who received money" else "Person you borrowed money from") },
+                    supportingText = { Text(if (direction == "LENT") "Who did you give the money to?" else "Who gave you the money?") },
                     singleLine = true
                 )
                 OutlinedTextField(
                     name2, { name2 = it },
-                    label = { Text(if (direction == "LENT") "Lent Name" else "Borrower Name") },
-                    supportingText = { Text(if (direction == "LENT") "Person who received the loan" else "Person who borrowed the money") },
+                    label = { Text(if (direction == "BORROWED_FOR_OTHER") "Your name (person who borrowed)" else if (direction == "LENT") "Your name / lender name" else "Your name (optional)") },
+                    supportingText = { Text(if (direction == "BORROWED_FOR_OTHER") "Name used when you borrowed the money" else "Optional name for your side of this record") },
                     singleLine = true
                 )
+                if (direction == "BORROWED_FOR_OTHER") OutlinedTextField(name3, { name3 = it }, label = { Text("Person you gave the money to") }, supportingText = { Text("The person who asked you for money") }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.FilterChip(selected = direction == "LENT", onClick = { direction = "LENT" }, label = { Text("I lent") })
                     androidx.compose.material3.FilterChip(selected = direction == "BORROWED", onClick = { direction = "BORROWED" }, label = { Text("I borrowed") })
+                    androidx.compose.material3.FilterChip(selected = direction == "BORROWED_FOR_OTHER", onClick = { direction = "BORROWED_FOR_OTHER" }, label = { Text("Borrowed for someone") })
                 }
                 OutlinedTextField(
                     value = principal,
@@ -1134,9 +1139,9 @@ private fun LoanDialog(
         confirmButton = {
             TextButton(onClick = {
                 if (name1.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
-                    onSave(name1, name2, direction, amount, interest, startMillis, dueDays.toIntOrNull() ?: 0, note)
+                    onSave(name1, name2, name3, direction, amount, interest, startMillis, dueDays.toIntOrNull() ?: 0, note)
                 }
-            }, enabled = name1.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
+            }, enabled = name1.isNotBlank() && (direction != "BORROWED_FOR_OTHER" || (name2.isNotBlank() && name3.isNotBlank())) && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
                 Text(if (existing == null) "Save loan" else "Save changes")
             }
         },
@@ -1145,9 +1150,13 @@ private fun LoanDialog(
 }
 
 @Composable
-private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, String) -> Unit) {
+private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, Long, String, String, String) -> Unit) {
+    val context = LocalContext.current
     var amountText by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+    var method by remember { mutableStateOf("Cash") }
+    var reference by remember { mutableStateOf("") }
+    var paidAt by remember { mutableStateOf(System.currentTimeMillis()) }
     val amount = parseAmount(amountText)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1161,12 +1170,33 @@ private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, String) -> Uni
                     supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
                     singleLine = true
                 )
-                OutlinedTextField(note, { note = it }, label = { Text("Note / receipt reference (optional)") })
+                androidx.compose.material3.ExposedDropdownMenuBox(expanded = false, onExpandedChange = {}) {
+                    androidx.compose.material3.OutlinedTextField(method, {}, readOnly = true, label = { Text("How was it paid?") }, modifier = Modifier.menuAnchor(), trailingIcon = { androidx.compose.material3.DropdownMenu(expanded = false, onDismissRequest = {}) {} })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.FilterChip(selected = method == "Cash", onClick = { method = "Cash"; reference = "" }, label = { Text("Cash") })
+                    androidx.compose.material3.FilterChip(selected = method == "UPI", onClick = { method = "UPI" }, label = { Text("UPI") })
+                    androidx.compose.material3.FilterChip(selected = method == "Bank", onClick = { method = "Bank" }, label = { Text("Bank") })
+                    androidx.compose.material3.FilterChip(selected = method == "Other", onClick = { method = "Other" }, label = { Text("Other") })
+                }
+                if (method != "Cash") OutlinedTextField(reference, { reference = it }, label = { Text(if (method == "UPI") "UPI UTR number" else "Transaction / reference number") }, singleLine = true)
+                TextButton(onClick = {
+                    val selected = java.util.Calendar.getInstance().apply { timeInMillis = paidAt }
+                    DatePickerDialog(context, { _, year, month, day ->
+                        val date = java.util.Calendar.getInstance().apply { timeInMillis = paidAt; set(year, month, day) }
+                        paidAt = date.timeInMillis
+                    }, selected.get(java.util.Calendar.YEAR), selected.get(java.util.Calendar.MONTH), selected.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                }) { Text("Payment date: ${formatDate(paidAt)}") }
+                TextButton(onClick = {
+                    val selected = java.util.Calendar.getInstance().apply { timeInMillis = paidAt }
+                    TimePickerDialog(context, { _, hour, minute -> selected.set(java.util.Calendar.HOUR_OF_DAY, hour); selected.set(java.util.Calendar.MINUTE, minute); paidAt = selected.timeInMillis }, selected.get(java.util.Calendar.HOUR_OF_DAY), selected.get(java.util.Calendar.MINUTE), false).show()
+                }) { Text("Payment time: ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(paidAt))}") }
+                OutlinedTextField(note, { note = it }, label = { Text("Notes (optional)") })
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (amount != null && amount > 0) onSave(amount, note) },
-                enabled = amount != null && amount > 0) { Text("Save payment") }
+            TextButton(onClick = { if (amount != null && amount > 0) onSave(amount, paidAt, method, reference, note) },
+                enabled = amount != null && amount > 0 && (method == "Cash" || reference.isNotBlank())) { Text("Save payment") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
