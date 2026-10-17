@@ -487,7 +487,7 @@ private fun StatisticsScreen(
         }
         StatCard("Estimated monthly interest", money(monthlyInterest), Modifier.fillMaxWidth())
         StatCard("Loan records", loans.size.toString(), Modifier.fillMaxWidth())
-        StatCard("People", loans.map { it.personName.trim().lowercase() }.distinct().size.toString(), Modifier.fillMaxWidth())
+        StatCard("People", loans.flatMap { listOf(it.personName, it.personName2) }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size.toString(), Modifier.fillMaxWidth())
         StatCard("Highest outstanding person", maxPerson?.key ?: "—", Modifier.fillMaxWidth())
         Text("Balances include simple interest for completed months and subtract recorded payments. Interest is calculated on the original principal; confirm that this matches your agreement before relying on the totals.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -543,7 +543,8 @@ private fun LoanDialog(
     val amount = principal.toDoubleOrNull()
     val interest = rate.toDoubleOrNull()
     val parsedDate = runCatching { LocalDate.parse(startDateText) }.getOrNull()
-    val startMillis = parsedDate?.let { it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
+    val validStartDate = parsedDate != null && !parsedDate.isAfter(LocalDate.now())
+    val startMillis = if (validStartDate) parsedDate!!.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() else null
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (existing == null) "Add loan" else "Edit loan") },
@@ -572,7 +573,7 @@ private fun LoanDialog(
                             ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
                         }) { Text("Choose") }
                     },
-                    isError = parsedDate == null,
+                    isError = !validStartDate,
                     singleLine = true
                 )
                 OutlinedTextField(dueDays, { dueDays = it.filter(Char::isDigit).take(4) },
