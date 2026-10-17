@@ -234,6 +234,7 @@ private fun LoanManagerApp() {
         )
     ) {
         Scaffold(
+            containerColor = Color(0xFFF2F7F5),
             topBar = {
                 TopAppBar(
                     colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
@@ -420,7 +421,10 @@ private fun LoansScreen(
 private fun LoanCard(
     loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -462,7 +466,9 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
         if (people.isEmpty()) item { EmptyState("No people yet", "Your borrower and lender list will appear here.") }
         items(people.keys.toList(), key = { it }) { name ->
             val records = people[name].orEmpty().distinctBy { it.id }
-            Card(Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+                shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("${records.size} record(s) · Outstanding ${money(records.sumOf(balance))}",
@@ -644,7 +650,9 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your data stays on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text("No login, cloud database, or external server. Export a JSON backup to a folder you choose, or restore a previous backup using Android's document picker.")
-        Card(Modifier.fillMaxWidth()) {
+        Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+            shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Back up records", style = MaterialTheme.typography.titleMedium)
@@ -788,7 +796,9 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 
 @Composable
 private fun EmptyState(title: String, message: String) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Filled.AccountBalance, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(8.dp))
