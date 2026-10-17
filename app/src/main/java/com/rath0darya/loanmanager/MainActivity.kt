@@ -952,7 +952,7 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your data stays on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("No login, cloud database, or external server. Export a JSON backup to a folder you choose, or restore a previous backup using Android's document picker.")
+        Text("No login, cloud database, or external server. Back up all records to the Android folder in one tap, recover a saved device snapshot, or export an encrypted backup file.")
         Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
             shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
