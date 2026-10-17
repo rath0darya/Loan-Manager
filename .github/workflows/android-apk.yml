@@ -27,6 +27,14 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Keep the debug signing certificate stable between CI builds so updates do not fail
+      # with INSTALL_FAILED_UPDATE_INCOMPATIBLE just because a fresh runner generated a new key.
+      - name: Restore stable debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: fundniti-debug-signing-key-v1
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
