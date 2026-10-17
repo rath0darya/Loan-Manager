@@ -579,7 +579,10 @@ private fun LoanManagerApp() {
                     activity,
                     { appLocked = false; fingerprintFailures = 0 },
                     { count -> fingerprintFailures = maxOf(fingerprintFailures, count) },
-                    { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+                    { message ->
+                        fingerprintFailures = 3
+                        scope.launch { snackbarHostState.showSnackbar(message) }
+                    }
                 )
             }
         )
@@ -1323,7 +1326,7 @@ private fun PinUnlockDialog(
     var error by remember { mutableStateOf("") }
     val pinFocus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    val showPin = fingerprintFailures >= 1
+    val showPin = !fingerprintEnabled || fingerprintFailures >= 1
     LaunchedEffect(Unit) {
         if (fingerprintEnabled) onFingerprint()
     }
