@@ -17,6 +17,8 @@ class LoanReminderWorker(
         val loanId = inputData.getLong("loanId", -1L)
         val person = inputData.getString("personName") ?: "your contact"
         if (loanId < 0) return Result.failure()
+        val stillExists = LoanDatabase.get(applicationContext).loanDao().allLoans().any { it.id == loanId }
+        if (!stillExists) return Result.success()
 
         val channelId = "loan_due_reminders"
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
