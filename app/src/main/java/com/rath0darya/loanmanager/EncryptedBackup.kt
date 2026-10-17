@@ -1,6 +1,7 @@
 package com.rath0darya.loanmanager
 
 import android.content.Context
+import androidx.room.withTransaction
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import org.json.JSONArray
@@ -113,4 +114,75 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
         .put("loans", loanArray)
         .put("payments", paymentArray)
     return root.toString(2)
+}
+
+
+/**
+ * Portable automatic snapshot in shared Android/media storage.
+ *
+ * This copy is intentionally JSON so a fresh installation can recover it after the
+ * Android Keystore key from a previous installation is gone. It contains personal
+ * financial information and is therefore readable by anyone who can access the file.
+ */
+object DurableBackup {
+    fun automaticBackupFile(context: Context): File {
+        val root = context.externalMediaDirs.firstOrNull()
+            ?: context.getExternalFilesDir(null)
+            ?: context.filesDir
+        return File(root, "Lendora/backup/Lendora-Data.json")
+    }
+
+    fun writeAutomatic(context: Context, plainText: String): File {
+        val target = automaticBackupFile(context)
+        val parent = target.parentFile ?: throw IOException("Backup folder is unavailable")
+        if (!parent.exists() && !parent.mkdirs()) throw IOException("Could not create the Android backup folder")
+        // Write in place so no backup deletion operation or storage permission is needed.
+        target.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
+            writer.write(plainText)
+            writer.flush()
+        }
+        return target
+    }
+
+    fun readAutomatic(context: Context): String? {
+        val file = automaticBackupFile(context)
+        return if (file.isFile && file.length() > 0L) file.readText(Charsets.UTF_8) else null
+    }
+}
+
+internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: String) {
+    val root = JSONObject(text)
+    val loanArray = root.getJSONArray("loans")
+    val paymentArray = root.getJSONArray("payments")
+    db.withTransaction {
+        dao.clearPayments()
+        dao.clearLoans()
+        val ids = mutableMapOf<Long, Long>()
+        for (i in 0 until loanArray.length()) {
+            val o = loanArray.getJSONObject(i)
+            val oldId = o.getLong("id")
+            val due = o.opt("dueDate")
+            val newId = dao.addLoan(LoanEntity(
+                personName = o.getString("personName"),
+                personName2 = o.optString("personName2", ""),
+                direction = o.getString("direction"),
+                principal = o.getDouble("principal"),
+                monthlyRate = o.getDouble("monthlyRate"),
+                startDate = o.getLong("startDate"),
+                dueDate = if (due == null || due == JSONObject.NULL) null else (due as Number).toLong(),
+                note = o.optString("note", "")
+            ))
+            ids[oldId] = newId
+        }
+        for (i in 0 until paymentArray.length()) {
+            val o = paymentArray.getJSONObject(i)
+            val newLoanId = ids[o.getLong("loanId")] ?: continue
+            dao.addPayment(PaymentEntity(
+                loanId = newLoanId,
+                amount = o.getDouble("amount"),
+                paidAt = o.getLong("paidAt"),
+                note = o.optString("note", "")
+            ))
+        }
+    }
 }
