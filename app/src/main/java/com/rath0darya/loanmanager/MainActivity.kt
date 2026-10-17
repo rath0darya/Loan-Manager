@@ -319,7 +319,8 @@ private fun LoanManagerApp() {
 
     MaterialTheme(colorScheme = appColorScheme, typography = modernTypography()) {
         Scaffold(
-            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets.safeDrawing,
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
@@ -888,24 +889,25 @@ private fun InterestCalculatorCard() {
 
 @Composable
 private fun TenureCalculatorCard() {
+    val context = LocalContext.current
     var principalText by remember { mutableStateOf("") }
     var rateText by remember { mutableStateOf("") }
-    var targetText by remember { mutableStateOf("") }
+    var fromDateMillis by remember {
+        mutableStateOf(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+    }
+    var toDateMillis by remember {
+        mutableStateOf(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+    }
     val principal = parseAmount(principalText)
     val rate = rateText.replace(",", "").trim().toDoubleOrNull()
-    val targetInterest = parseAmount(targetText)
-    val valid = principal != null && principal > 0 && rate != null && rate > 0 &&
-        targetInterest != null && targetInterest >= 0
-    val tenure = if (valid) {
-        val monthlyInterest = principal!! * rate!! / 100.0
-        if (monthlyInterest > 0.0 && monthlyInterest.isFinite()) {
-            var fullMonths = kotlin.math.floor(targetInterest!! / monthlyInterest).toLong()
-            val remainder = (targetInterest!! - fullMonths * monthlyInterest).coerceAtLeast(0.0)
-            var extraDays = if (remainder <= 0.0000001) 0L else kotlin.math.ceil(remainder / (monthlyInterest / 30.0)).toLong()
-            if (extraDays >= 30) { fullMonths += extraDays / 30; extraDays %= 30 }
-            fullMonths to extraDays
-        } else null
-    } else null
+    val zone = ZoneId.systemDefault()
+    val fromDate = Instant.ofEpochMilli(fromDateMillis).atZone(zone).toLocalDate()
+    val toDate = Instant.ofEpochMilli(toDateMillis).atZone(zone).toLocalDate()
+    val valid = principal != null && principal > 0.0 &&
+        rate != null && rate >= 0.0 && !toDate.isBefore(fromDate)
+    val period = if (valid) java.time.Period.between(fromDate, toDate) else null
+    val interest = if (valid) accruedInterest(principal!!, rate!!, fromDateMillis, toDateMillis) else null
+
     Card(
         Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
@@ -913,29 +915,72 @@ private fun TenureCalculatorCard() {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Tenure Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Find how long it takes for interest to reach your target amount under the same fixed monthly rule.",
-                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(principalText, { principalText = amountInputFormat(it) },
+            Text(
+                "Choose a start date and end date to calculate the exact calendar months and remaining days. Interest follows the same loan rule: full monthly interest for each completed calendar month, then monthly interest ÷ 30 for each extra day.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedTextField(
+                principalText, { principalText = amountInputFormat(it) },
                 modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(rateText, { rateText = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
+            )
+            OutlinedTextField(
+                rateText, { rateText = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
                 modifier = Modifier.fillMaxWidth(), label = { Text("Fixed monthly interest rate (%)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-            OutlinedTextField(targetText, { targetText = amountInputFormat(it) },
-                modifier = Modifier.fillMaxWidth(), label = { Text("Target interest amount (₹)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
+            )
+            TextButton(onClick = {
+                val selected = java.util.Calendar.getInstance().apply { timeInMillis = fromDateMillis }
+                android.app.DatePickerDialog(
+                    context,
+                    { _, year, month, day ->
+                        val selectedDate = LocalDate.of(year, month + 1, day)
+                        fromDateMillis = selectedDate.atStartOfDay(zone).toInstant().toEpochMilli()
+                        if (toDate.isBefore(selectedDate)) {
+                            toDateMillis = fromDateMillis
+                        }
+                    },
+                    selected.get(java.util.Calendar.YEAR),
+                    selected.get(java.util.Calendar.MONTH),
+                    selected.get(java.util.Calendar.DAY_OF_MONTH)
+                ).apply { datePicker.maxDate = toDateMillis }.show()
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("From date: ${formatDate(fromDateMillis)}")
+            }
+            TextButton(onClick = {
+                val selected = java.util.Calendar.getInstance().apply { timeInMillis = toDateMillis }
+                android.app.DatePickerDialog(
+                    context,
+                    { _, year, month, day ->
+                        toDateMillis = LocalDate.of(year, month + 1, day)
+                            .atStartOfDay(zone).toInstant().toEpochMilli()
+                    },
+                    selected.get(java.util.Calendar.YEAR),
+                    selected.get(java.util.Calendar.MONTH),
+                    selected.get(java.util.Calendar.DAY_OF_MONTH)
+                ).apply { datePicker.minDate = fromDateMillis }.show()
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("To date: ${formatDate(toDateMillis)}")
+            }
             when {
-                valid && tenure != null -> {
-                    HorizontalResultLine("Estimated tenure", "${tenure.first} months, ${tenure.second} days")
-                    HorizontalResultLine("Target interest", money(targetInterest!!))
-                    HorizontalResultLine("Principal + target interest", money(principal!! + targetInterest))
-                    Text("Extra days are calculated at 1/30 of the monthly interest. Actual calendar month lengths can shift the exact anniversary date.",
+                principal == null || principal <= 0.0 || rate == null || rate < 0.0 -> {
+                    Text("Enter a positive principal amount and a non-negative monthly interest rate.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                valid -> Text("This rate is too large to calculate a reliable tenure.",
+                period != null && interest != null -> {
+                    HorizontalResultLine("Total duration", "${period.months + period.years * 12} months, ${period.days} days")
+                    HorizontalResultLine("Total days", "${java.time.temporal.ChronoUnit.DAYS.between(fromDate, toDate)} days")
+                    HorizontalResultLine("Interest for this period", money(interest))
+                    HorizontalResultLine("Principal + interest", money(principal + interest))
+                    Text(
+                        "Calendar months use the actual dates, including 28/29/30/31-day months. Extra days earn 1/30 of the monthly interest per day. This is an estimate and does not change saved loans.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                else -> Text("The end date must not be before the start date.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                else -> Text("Enter a positive principal, a monthly rate greater than zero, and a non-negative target interest amount.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
