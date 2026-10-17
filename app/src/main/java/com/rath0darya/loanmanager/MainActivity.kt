@@ -775,50 +775,41 @@ private fun StatisticsScreen(
                 }
             }
         }
-        GlassPanel(title = "Stacked column chart · amortization estimate", subtitle = "Estimated principal vs interest allocation over the last 6 months") {
+        GlassPanel(title = "Payments split", subtitle = "Estimated amount going to principal and interest in the last 6 months") {
             StackedPaymentChart(stackedPayments)
-            Text("Estimate only: recorded payments are allocated to accrued interest first, then principal. FundNiti does not store the actual split supplied by the lender.",
+            Text("This split is an estimate. The app records the full payment amount, not a lender-provided split.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        GlassPanel(title = "Line chart · outstanding balance", subtitle = "Reconstructed month-end balance over the last 6 months") {
+        GlassPanel(title = "Amount still due over time", subtitle = "Estimated balance at the end of each of the last 6 months") {
             TrendLineChart(balanceTrend)
-            Text("Uses loan start dates, completed months of simple interest, and repayments recorded by each month end.",
+            Text("Uses loan dates, interest added, and payments recorded by each month end.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        GlassPanel(title = "Donut chart · portfolio health", subtitle = "Open loans grouped by due-date information") {
+        GlassPanel(title = "Loan reminders", subtitle = "Loans that are due soon, overdue, or have no reminder date") {
             HealthDonut(currentCount, overdueCount, noDueDateCount, Modifier.size(136.dp))
             LegendRow("Current / not yet due", Color(0xFF16866B), "$currentCount loans")
             LegendRow("Overdue", Color(0xFFE59B42), "$overdueCount loans")
             LegendRow("No due date set", Color(0xFF5B8DE5), "$noDueDateCount loans")
-            Text("Defaulted status is not tracked yet; overdue does not automatically mean defaulted.",
+            Text("A late payment is not automatically marked as a default.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        GlassPanel(title = "Grouped bar chart · loan direction", subtitle = "New principal recorded each month") {
+        GlassPanel(title = "Money lent and borrowed each month", subtitle = "Original amount recorded each month") {
             GroupedDirectionChart(grouped)
             LegendRow("You lent", Color(0xFF16866B), "Lent principal")
             LegendRow("You borrowed", Color(0xFF5B8DE5), "Borrowed principal")
         }
-        GlassPanel(title = "Waterfall-style cash-flow view", subtitle = "New principal versus repayments by month") {
+        GlassPanel(title = "New loans and payments", subtitle = "Compare new loan amounts with payments received or made") {
             CashFlowBridgeChart(originationsVsPayments)
-            Text("Repayments include both principal and interest. The app does not yet track principal allocation or write-offs, so this is a cash-flow comparison rather than a full portfolio waterfall.",
+            Text("Payments include both principal and interest.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        GlassPanel(title = "Lent vs borrowed", subtitle = "Compare current outstanding totals") {
+        GlassPanel(title = "Money lent vs money borrowed", subtitle = "Compare amounts still due") {
             ComparisonBar("Lent", lentBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF16866B))
             ComparisonBar("Borrowed", borrowedBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF5B8DE5))
         }
         GlassPanel(title = "Repayment activity", subtitle = "Payments recorded in the last 6 months") {
             PaymentBars(paymentBars)
         }
-        Text("Advanced analytics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        DataNeededPanel("Scatter plot · DTI vs approved amount",
-            "Needs monthly income, monthly debt obligations and approved loan amount; these fields are not currently collected.")
-        DataNeededPanel("Box plot · credit scores and risk-tier rates",
-            "Needs credit scores and risk tiers. The app currently stores neither, so this distribution cannot be calculated.")
-        DataNeededPanel("Funnel chart · application pipeline",
-            "Needs inquiry, application, approval, rejection and disbursement stages. FundNiti currently records loans after creation.")
-        DataNeededPanel("Geographic heatmap · regional risk",
-            "Needs borrower location and regional delinquency data. FundNiti does not collect location data.")
         Text("Principal and interest by person", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         val personBreakdown = loans.flatMap { loan ->
             listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.map { it.trim() to loan }
