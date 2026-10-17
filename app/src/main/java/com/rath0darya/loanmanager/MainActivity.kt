@@ -91,6 +91,8 @@ import org.json.JSONObject
 import java.text.DateFormat
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Date
 import java.util.Locale
 import java.time.Instant
@@ -1184,18 +1186,29 @@ private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis:
     val start = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
     val end = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
     if (end.isBefore(start)) return 0.0
-    val monthlyInterest = principal * monthlyRate / 100.0
+
+    val hundred = BigDecimal.valueOf(100L)
+    val scale = 12
+    val rounding = RoundingMode.HALF_UP
+    val monthlyInterest = BigDecimal.valueOf(principal)
+        .multiply(BigDecimal.valueOf(monthlyRate))
+        .divide(hundred, scale, rounding)
     var completedPeriods = 0L
     while (!start.plusMonths(completedPeriods + 1).isAfter(end)) completedPeriods++
-    var interest = monthlyInterest * completedPeriods
+    var interest = monthlyInterest.multiply(BigDecimal.valueOf(completedPeriods))
     val periodStart = start.plusMonths(completedPeriods)
     if (periodStart.isBefore(end)) {
         val periodEnd = start.plusMonths(completedPeriods + 1)
-        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, end).toDouble()
-        val periodDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd).toDouble()
-        if (periodDays > 0.0) interest += monthlyInterest * elapsedDays / periodDays
+        val elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, end)
+        val periodDays = java.time.temporal.ChronoUnit.DAYS.between(periodStart, periodEnd)
+        if (periodDays > 0L) {
+            val partial = monthlyInterest.multiply(BigDecimal.valueOf(elapsedDays))
+                .divide(BigDecimal.valueOf(periodDays), scale, rounding)
+            interest = interest.add(partial)
+        }
     }
-    return interest.coerceAtLeast(0.0)
+    // Round the accrued interest to the nearest paise, half up.
+    return interest.setScale(2, rounding).toDouble().coerceAtLeast(0.0)
 }
 
 private fun elapsedLoanDays(startMillis: Long, endMillis: Long): Long {
