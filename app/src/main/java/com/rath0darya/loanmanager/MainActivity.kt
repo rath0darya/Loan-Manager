@@ -441,9 +441,15 @@ private fun LoanCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
-                Text("${loan.monthlyRate}% / month", style = MaterialTheme.typography.bodySmall)
+            val interestMonths = completedMonths(loan.startDate, System.currentTimeMillis())
+            val interestAmount = loan.principal * loan.monthlyRate / 100.0 * interestMonths
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text("Principal: ${money(loan.principal)}", style = MaterialTheme.typography.bodySmall)
+                    Text("Rate: ${loan.monthlyRate}% / month", style = MaterialTheme.typography.bodySmall)
+                }
+                Text("Interest accrued (${interestMonths} month(s)): ${money(interestAmount)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             if (paid > 0.0) Text("Paid so far: ${money(paid)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             if (loan.note.isNotBlank()) Text(loan.note, style = MaterialTheme.typography.bodySmall,
@@ -467,21 +473,36 @@ private fun LoanCard(
 
 @Composable
 private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double) {
-    val people = loans.flatMap { loan -> listOf(loan.personName, loan.personName2).filter { it.isNotBlank() }.map { it.trim() to loan } }.groupBy({ it.first }, { it.second }).toSortedMap(String.CASE_INSENSITIVE_ORDER)
+    // Normalize names so "Ravi", "ravi", and names with extra spaces merge into one person.
+    val people = loans.flatMap { loan ->
+        listOf(loan.personName, loan.personName2)
+            .filter { it.isNotBlank() }
+            .map { it.trim() to loan }
+    }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it })
+        .toSortedMap()
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("People are created automatically when you add a loan.", style = MaterialTheme.typography.bodyMedium) }
+        item { Text("Each person combines all their loan records. Totals are grouped by loan direction.", style = MaterialTheme.typography.bodyMedium) }
         if (people.isEmpty()) item { EmptyState("No people yet", "Your borrower and lender list will appear here.") }
-        items(people.keys.toList(), key = { it }) { name ->
-            val records = people[name].orEmpty().distinctBy { it.id }
+        items(people.keys.toList(), key = { it }) { personKey ->
+            val entries = people[personKey].orEmpty()
+            val name = entries.firstOrNull()?.first ?: personKey
+            val records = entries.map { it.second }.distinctBy { it.id }
+            val lentTotal = records.filter { it.direction == "LENT" }.sumOf(balance)
+            val borrowedTotal = records.filter { it.direction == "BORROWED" }.sumOf(balance)
+            val combinedTotal = lentTotal + borrowedTotal
             Card(Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
                 shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
-                Column(Modifier.padding(16.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${records.size} record(s) · Outstanding ${money(records.sumOf(balance))}",
-                        style = MaterialTheme.typography.bodyMedium)
-                    Text("Lent: ${money(records.filter { it.direction == "LENT" }.sumOf(balance))}   Borrowed: ${money(records.filter { it.direction == "BORROWED" }.sumOf(balance))}",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Combined outstanding across ${records.size} loan(s): ${money(combinedTotal)}",
+                        style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("You lent · ${money(lentTotal)}",
+                        style = MaterialTheme.typography.bodySmall, color = Color(0xFF126B55))
+                    Text("You borrowed · ${money(borrowedTotal)}",
+                        style = MaterialTheme.typography.bodySmall, color = Color(0xFF4C86D9))
+                    Text("Total = outstanding balances of this person's unique loan records, split by each record's Lent/Borrowed type.",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -809,9 +830,11 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
-            value.replace("₹", "").replace(",", "").toDoubleOrNull()?.let { amount ->
-                Text(amountInWords(amount), style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+            if (value.trim().startsWith("₹")) {
+                value.replace("₹", "").replace(",", "").toDoubleOrNull()?.let { amount ->
+                    Text(amountInWords(amount), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                }
             }
         }
     }
