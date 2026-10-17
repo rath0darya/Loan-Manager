@@ -15,25 +15,40 @@ internal fun canUseFingerprint(activity: FragmentActivity): Boolean =
     BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
         BiometricManager.BIOMETRIC_SUCCESS
 
-internal fun requestFingerprintUnlock(activity: FragmentActivity, onSuccess: () -> Unit, onError: (String) -> Unit) {
+internal fun requestFingerprintUnlock(
+    activity: FragmentActivity,
+    onSuccess: () -> Unit,
+    onFailureCount: (Int) -> Unit,
+    onError: (String) -> Unit
+) {
     val manager = BiometricManager.from(activity)
     if (manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) != BiometricManager.BIOMETRIC_SUCCESS) {
         onError("Fingerprint is not set up or is unavailable. Enter your 6-digit PIN instead.")
         return
     }
-    val prompt = BiometricPrompt(
+    var failures = 0
+    lateinit var prompt: BiometricPrompt
+    prompt = BiometricPrompt(
         activity,
         ContextCompat.getMainExecutor(activity),
         object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
+            override fun onAuthenticationFailed() {
+                failures += 1
+                onFailureCount(failures)
+                if (failures >= 2) prompt.cancelAuthentication()
+            }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                onError(errString.toString())
+                if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                    errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                    errorCode != BiometricPrompt.ERROR_CANCELED
+                ) onError(errString.toString())
             }
         }
     )
     val info = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Unlock FundNiti")
-        .setSubtitle("Confirm your fingerprint")
+        .setSubtitle("Touch the fingerprint sensor")
         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
         .setNegativeButtonText("Use PIN")
         .build()
