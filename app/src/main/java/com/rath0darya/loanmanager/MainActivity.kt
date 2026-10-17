@@ -1617,7 +1617,7 @@ private fun BackupScreen(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Back up records", style = MaterialTheme.typography.titleMedium)
-                Text("One tap saves every loan and repayment to Android/media/com.rath0darya.loanmanager/Lendora/backup/Lendora-Data.json. On reinstall, FundNiti checks this file and restores it automatically when the in-app database is empty.")
+                Text("One tap saves every loan and repayment to Download/FundNiti/Backup/Lendora-Data.json. On Android 10 and later, this shared Downloads copy is designed to remain after uninstall. On reinstall, FundNiti checks it and restores records automatically when the in-app database is empty.")
                 Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth()) { Text("Back up all data now") }
                 Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export encrypted backup file") }
             }
