@@ -432,8 +432,80 @@ private fun LoanManagerApp() {
             }
         })
     }
+    detailLoan?.let { loan ->
+        LoanDetailsDialog(loan, payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }, balance(loan)) { detailLoan = null }
+    }
+    deleteConfirmLoan?.let { loan ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmLoan = null },
+            title = { Text("Delete this loan?") },
+            text = { Text("This will permanently delete this loan and all its payment records for " + listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ") + ". This cannot be undone. Are you sure?") },
+            confirmButton = { TextButton(onClick = {
+                scope.launch {
+                    dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
+                    withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
+                    deleteConfirmLoan = null
+                    snackbarHostState.showSnackbar("Loan and its payment records deleted")
+                }
+            }) { Text("Yes, delete") } },
+            dismissButton = { TextButton(onClick = { deleteConfirmLoan = null }) { Text("Cancel") } }
+        )
+    }
 }
 
+@Composable
+private fun LoanDetailsDialog(loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double, onDismiss: () -> Unit) {
+    val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
+    val totalPaid = payments.sumOf { it.amount }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Full loan report") },
+        text = {
+            Column(Modifier.fillMaxWidth().height(520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("People", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → "))
+                Text(when (loan.direction) { "LENT" -> "You gave money to someone."; "BORROWED_FOR_OTHER" -> "You borrowed money from one person and gave it to someone else."; else -> "You borrowed money for yourself." })
+                androidx.compose.material3.HorizontalDivider()
+                Text("Loan details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                DetailLine("Loan date", formatDate(loan.startDate))
+                DetailLine("Original amount", money(loan.principal))
+                DetailLine("Interest rate", "${loan.monthlyRate}% per month")
+                DetailLine("Interest added so far", money(interest))
+                DetailLine("Payments made", money(totalPaid))
+                DetailLine("Amount still due", money(outstanding))
+                DetailLine("Status", if (outstanding <= 0.009) "Fully paid" else "Still to be paid")
+                loan.dueDate?.let { DetailLine("Reminder date", formatDate(it)) }
+                if (loan.note.isNotBlank()) DetailLine("Notes", loan.note)
+                androidx.compose.material3.HorizontalDivider()
+                Text("Payment history (${payments.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                if (payments.isEmpty()) Text("No payments recorded yet.")
+                payments.forEachIndexed { index, payment ->
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Payment ${index + 1}: ${money(payment.amount)}", fontWeight = FontWeight.SemiBold)
+                            DetailLine("Date", formatDate(payment.paidAt))
+                            DetailLine("Time", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(payment.paidAt)))
+                            DetailLine("Paid by", payment.paymentMethod)
+                            if (payment.referenceNumber.isNotBlank()) DetailLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction number", payment.referenceNumber)
+                            if (payment.note.isNotBlank()) DetailLine("Notes", payment.note)
+                        }
+                    }
+                }
+                Text("This report is view-only. Use the loan card buttons to add a payment or edit the loan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close report") } }
+    )
+}
+
+@Composable
+private fun DetailLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1.2f))
+    }
+}
 @Composable
 private fun DashboardScreen(
     modifier: Modifier, loans: List<LoanEntity>, outstanding: Double, principal: Double,
@@ -737,6 +809,24 @@ private fun StatisticsScreen(
             "Needs inquiry, application, approval, rejection and disbursement stages. FundNiti currently records loans after creation.")
         DataNeededPanel("Geographic heatmap · regional risk",
             "Needs borrower location and regional delinquency data. FundNiti does not collect location data.")
+        Text("Principal and interest by person", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        val personBreakdown = loans.flatMap { loan ->
+            listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.map { it.trim() to loan }
+        }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it })
+        personBreakdown.toSortedMap().forEach { (_, entries) ->
+            val personName = entries.first().first
+            val personLoans = entries.map { it.second }.distinctBy { it.id }
+            val personPrincipal = personLoans.sumOf { it.principal }
+            val personInterest = personLoans.sumOf { accruedInterest(it.principal, it.monthlyRate, it.startDate, System.currentTimeMillis()) }
+            GlassPanel(title = personName, subtitle = "${personLoans.size} loan record(s)") {
+                DetailLine("Original amount", money(personPrincipal))
+                DetailLine("Interest added so far", money(personInterest))
+                DetailLine("Amount still due", money(personLoans.sumOf(balance)))
+                val max = maxOf(personPrincipal, personInterest, 1.0)
+                ComparisonBar("Principal", personPrincipal, max, Color(0xFF16866B))
+                ComparisonBar("Interest", personInterest, max, Color(0xFF5B8DE5))
+            }
+        }
         Text("Key metrics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Original principal", money(principal), Modifier.weight(1f))
@@ -1170,9 +1260,6 @@ private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, Long, String, 
                     supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
                     singleLine = true
                 )
-                androidx.compose.material3.ExposedDropdownMenuBox(expanded = false, onExpandedChange = {}) {
-                    androidx.compose.material3.OutlinedTextField(method, {}, readOnly = true, label = { Text("How was it paid?") }, modifier = Modifier.menuAnchor(), trailingIcon = { androidx.compose.material3.DropdownMenu(expanded = false, onDismissRequest = {}) {} })
-                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.FilterChip(selected = method == "Cash", onClick = { method = "Cash"; reference = "" }, label = { Text("Cash") })
                     androidx.compose.material3.FilterChip(selected = method == "UPI", onClick = { method = "UPI" }, label = { Text("UPI") })
