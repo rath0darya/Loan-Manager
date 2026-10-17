@@ -477,7 +477,7 @@ private fun LoanDetailsDialog(loan: LoanEntity, payments: List<PaymentEntity>, o
                 loan.dueDate?.let { DetailLine("Reminder date", formatDate(it)) }
                 if (loan.note.isNotBlank()) DetailLine("Notes", loan.note)
                 androidx.compose.material3.HorizontalDivider()
-                Text("Payment history (${payments.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Payments made (${payments.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 if (payments.isEmpty()) Text("No payments recorded yet.")
                 payments.forEachIndexed { index, payment ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -640,14 +640,14 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
     }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it })
         .toSortedMap()
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Each person combines all their loan records. Totals are grouped by loan direction.", style = MaterialTheme.typography.bodyMedium) }
+        item { Text("See each person’s total amount, payments and amount still due.", style = MaterialTheme.typography.bodyMedium) }
         if (people.isEmpty()) item { EmptyState("No people yet", "Your borrower and lender list will appear here.") }
         items(people.keys.toList(), key = { it }) { personKey ->
             val entries = people[personKey].orEmpty()
             val name = entries.firstOrNull()?.first ?: personKey
             val records = entries.map { it.second }.distinctBy { it.id }
             val lentTotal = records.filter { it.direction == "LENT" }.sumOf(balance)
-            val borrowedTotal = records.filter { it.direction == "BORROWED" }.sumOf(balance)
+            val borrowedTotal = records.filter { it.direction == "BORROWED" || it.direction == "BORROWED_FOR_OTHER" }.sumOf(balance)
             val combinedTotal = lentTotal + borrowedTotal
             Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
                 shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -660,7 +660,7 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("You lent · ${money(lentTotal)}",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    Text("You borrowed · ${money(borrowedTotal)}",
+                    Text("You borrowed / borrowed for someone · ${money(borrowedTotal)}",
                         style = MaterialTheme.typography.bodySmall, color = Color(0xFF4C86D9))
                     Text("Total = outstanding balances of this person's unique loan records, split by each record's Lent/Borrowed type.",
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -676,12 +676,12 @@ private fun StatisticsScreen(
     balance: (LoanEntity) -> Double, outstanding: Double, principal: Double
 ) {
     val lent = loans.filter { it.direction == "LENT" }
-    val borrowed = loans.filter { it.direction == "BORROWED" }
+    val borrowed = loans.filter { it.direction == "BORROWED" || it.direction == "BORROWED_FOR_OTHER" }
     val lentBalance = lent.sumOf(balance)
     val borrowedBalance = borrowed.sumOf(balance)
     val paymentSum = payments.sumOf { it.amount }
     val monthlyInterest = loans.sumOf { it.principal * it.monthlyRate / 100.0 }
-    val peopleCount = loans.flatMap { listOf(it.personName, it.personName2) }
+    val peopleCount = loans.flatMap { listOf(it.personName, it.personName2, it.personName3) }
         .filter { it.isNotBlank() }.map { it.trim().lowercase(Locale.ROOT) }.distinct().size
     val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2, loan.personName3)
         .filter { it.isNotBlank() }.map { it.trim() to loan } }
@@ -747,10 +747,17 @@ private fun StatisticsScreen(
     }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Financial insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("A visual snapshot of your lending portfolio, calculated from offline loan and repayment records.",
+        Text("Money reports", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Charts and totals from your saved loan and payment records.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         StatCard("Total outstanding", money(outstanding), Modifier.fillMaxWidth())
+        val totalInterestNow = loans.sumOf { accruedInterest(it.principal, it.monthlyRate, it.startDate, System.currentTimeMillis()) }
+        GlassPanel(title = "Total principal and interest", subtitle = "Original amounts compared with interest added so far") {
+            DetailLine("Total principal", money(principal))
+            ComparisonBar("Principal", principal, maxOf(principal, totalInterestNow, 1.0), Color(0xFF16866B))
+            DetailLine("Interest added", money(totalInterestNow))
+            ComparisonBar("Interest", totalInterestNow, maxOf(principal, totalInterestNow, 1.0), Color(0xFF5B8DE5))
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Money lent", money(lentBalance), Modifier.weight(1f))
             StatCard("Money borrowed", money(borrowedBalance), Modifier.weight(1f))
