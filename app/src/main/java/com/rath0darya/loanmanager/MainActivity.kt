@@ -900,7 +900,7 @@ private fun TenureCalculatorCard() {
         val monthlyInterest = principal!! * rate!! / 100.0
         if (monthlyInterest > 0.0 && monthlyInterest.isFinite()) {
             var fullMonths = kotlin.math.floor(targetInterest!! / monthlyInterest).toLong()
-            val remainder = (targetInterest - fullMonths * monthlyInterest).coerceAtLeast(0.0)
+            val remainder = (targetInterest!! - fullMonths * monthlyInterest).coerceAtLeast(0.0)
             var extraDays = if (remainder <= 0.0000001) 0L else kotlin.math.ceil(remainder / (monthlyInterest / 30.0)).toLong()
             if (extraDays >= 30) { fullMonths += extraDays / 30; extraDays %= 30 }
             fullMonths to extraDays
