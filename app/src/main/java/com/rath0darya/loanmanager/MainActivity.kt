@@ -413,7 +413,7 @@ private fun LoanManagerApp() {
                                     val json = createBackupJson(dao)
                                     val file = DurableBackup.writeAutomatic(context, json)
                                     val root = JSONObject(json)
-                                    Triple(file.absolutePath, root.getJSONArray("loans").length(), root.getJSONArray("payments").length())
+                                    Triple(file.toString(), root.getJSONArray("loans").length(), root.getJSONArray("payments").length())
                                 }
                                 backupStatus = "Saved ${result.second} loans and ${result.third} repayments. File: ${result.first}"
                                 snackbarHostState.showSnackbar("All data backed up to the Android folder")
