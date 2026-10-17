@@ -162,6 +162,8 @@ private fun LoanManagerApp() {
     var showAddLoan by remember { mutableStateOf(false) }
     var editLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
+    var editingPayment by remember { mutableStateOf<PaymentEntity?>(null) }
+    var deleteConfirmPayment by remember { mutableStateOf<PaymentEntity?>(null) }
     var detailLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var deleteConfirmLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var search by remember { mutableStateOf("") }
@@ -425,18 +427,50 @@ private fun LoanManagerApp() {
         )
     }
     paymentFor?.let { loan ->
-        PaymentDialog(onDismiss = { paymentFor = null }, onSave = { amount, paidAt, method, reference, note ->
+        PaymentDialog(existing = null, onDismiss = { paymentFor = null }, onSave = { amount, paidAt, method, reference, note ->
             scope.launch {
                 dao.addPayment(PaymentEntity(loanId = loan.id, amount = amount,
                     paidAt = paidAt, note = note.trim(), paymentMethod = method, referenceNumber = reference.trim()))
-                DurableBackup.writeAutomatic(context, createBackupJson(dao))
+                withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
                 paymentFor = null
                 snackbarHostState.showSnackbar("Payment recorded")
             }
         })
     }
+    editingPayment?.let { payment ->
+        PaymentDialog(existing = payment, onDismiss = { editingPayment = null }, onSave = { amount, paidAt, method, reference, note ->
+            scope.launch {
+                dao.updatePayment(payment.copy(amount = amount, paidAt = paidAt, paymentMethod = method,
+                    referenceNumber = reference.trim(), note = note.trim()))
+                withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
+                editingPayment = null
+                snackbarHostState.showSnackbar("Payment updated")
+            }
+        })
+    }
     detailLoan?.let { loan ->
-        LoanDetailsDialog(loan, payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }, balance(loan)) { detailLoan = null }
+        LoanDetailsDialog(
+            loan, payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }, balance(loan),
+            onDismiss = { detailLoan = null },
+            onEditPayment = { editingPayment = it },
+            onDeletePayment = { deleteConfirmPayment = it }
+        )
+    }
+    deleteConfirmPayment?.let { payment ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmPayment = null },
+            title = { Text("Delete this payment?") },
+            text = { Text("Delete the payment of ${money(payment.amount)} recorded on ${formatDate(payment.paidAt)}? The amount still due will be recalculated.") },
+            confirmButton = { TextButton(onClick = {
+                scope.launch {
+                    dao.deletePayment(payment.id)
+                    withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
+                    deleteConfirmPayment = null
+                    snackbarHostState.showSnackbar("Payment deleted and balance updated")
+                }
+            }) { Text("Yes, delete payment") } },
+            dismissButton = { TextButton(onClick = { deleteConfirmPayment = null }) { Text("Cancel") } }
+        )
     }
     deleteConfirmLoan?.let { loan ->
         AlertDialog(
@@ -457,7 +491,14 @@ private fun LoanManagerApp() {
 }
 
 @Composable
-private fun LoanDetailsDialog(loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double, onDismiss: () -> Unit) {
+private fun LoanDetailsDialog(
+    loan: LoanEntity,
+    payments: List<PaymentEntity>,
+    outstanding: Double,
+    onDismiss: () -> Unit,
+    onEditPayment: (PaymentEntity) -> Unit,
+    onDeletePayment: (PaymentEntity) -> Unit
+) {
     val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
     val totalPaid = payments.sumOf { it.amount }
     AlertDialog(
@@ -491,10 +532,18 @@ private fun LoanDetailsDialog(loan: LoanEntity, payments: List<PaymentEntity>, o
                             DetailLine("Paid by", payment.paymentMethod)
                             if (payment.referenceNumber.isNotBlank()) DetailLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction number", payment.referenceNumber)
                             if (payment.note.isNotBlank()) DetailLine("Notes", payment.note)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { onEditPayment(payment) }) {
+                                    Icon(Icons.Filled.Edit, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Edit payment")
+                                }
+                                TextButton(onClick = { onDeletePayment(payment) }) {
+                                    Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Delete payment")
+                                }
+                            }
                         }
                     }
                 }
-                Text("This report is view-only. Use the loan card buttons to add a payment or edit the loan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("You can change or delete any payment. The amount still due updates automatically.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close report") } }
@@ -1241,17 +1290,17 @@ private fun LoanDialog(
 }
 
 @Composable
-private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, Long, String, String, String) -> Unit) {
+private fun PaymentDialog(existing: PaymentEntity?, onDismiss: () -> Unit, onSave: (Double, Long, String, String, String) -> Unit) {
     val context = LocalContext.current
-    var amountText by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var method by remember { mutableStateOf("Cash") }
-    var reference by remember { mutableStateOf("") }
-    var paidAt by remember { mutableStateOf(System.currentTimeMillis()) }
+    var amountText by remember { mutableStateOf(existing?.amount?.let { amountInputFormat(it.toString()) } ?: "") }
+    var note by remember { mutableStateOf(existing?.note ?: "") }
+    var method by remember { mutableStateOf(existing?.paymentMethod ?: "Cash") }
+    var reference by remember { mutableStateOf(existing?.referenceNumber ?: "") }
+    var paidAt by remember { mutableStateOf(existing?.paidAt ?: System.currentTimeMillis()) }
     val amount = parseAmount(amountText)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Record payment") },
+        title = { Text(if (existing == null) "Record payment" else "Edit payment") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -1290,7 +1339,7 @@ private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, Long, String, 
         },
         confirmButton = {
             TextButton(onClick = { if (amount != null && amount > 0) onSave(amount, paidAt, method, reference, note) },
-                enabled = amount != null && amount > 0 && (method == "Cash" || reference.isNotBlank())) { Text("Save payment") }
+                enabled = amount != null && amount > 0 && (method == "Cash" || reference.isNotBlank())) { Text(if (existing == null) "Save payment" else "Save changes") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
