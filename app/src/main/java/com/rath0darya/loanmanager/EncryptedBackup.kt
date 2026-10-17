@@ -1,6 +1,11 @@
 package com.rath0darya.loanmanager
 
 import android.content.Context
+import android.content.ContentValues
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.room.withTransaction
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -135,31 +140,83 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
  * financial information and is therefore readable by anyone who can access the file.
  */
 object DurableBackup {
+    private const val BACKUP_NAME = "Lendora-Data.json"
+    private const val RELATIVE_PATH = "Download/FundNiti/Backup/"
+
+    // Android 10+ uses shared Downloads storage so the file is not removed with the app.
+    // Older Android versions retain the previous app-specific fallback.
     fun automaticBackupFile(context: Context): File {
         val root = context.externalMediaDirs.firstOrNull()
-            ?: throw IOException("Shared Android/media storage is unavailable on this device")
-        return File(root, "Lendora/backup/Lendora-Data.json")
+            ?: throw IOException("Shared storage is unavailable on this device")
+        return File(root, "Lendora/backup/$BACKUP_NAME")
     }
 
-    fun writeAutomatic(context: Context, plainText: String): File {
-        val target = automaticBackupFile(context)
-        val parent = target.parentFile ?: throw IOException("Backup folder is unavailable")
-        if (!parent.exists() && !parent.mkdirs()) throw IOException("Could not create the Android backup folder")
+    private fun findSharedBackup(context: Context): Uri? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(MediaStore.Downloads._ID)
+        val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} = ?"
+        context.contentResolver.query(collection, projection, selection, arrayOf(BACKUP_NAME, RELATIVE_PATH), null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
+                return Uri.withAppendedPath(collection, id.toString())
+            }
+        }
+        return null
+    }
 
-        // Never let an empty database silently destroy a previously useful device backup.
-        val incoming = JSONObject(plainText)
-        val incomingLoans = incoming.optJSONArray("loans")?.length() ?: 0
-        val incomingPayments = incoming.optJSONArray("payments")?.length() ?: 0
-        if (incomingLoans == 0 && incomingPayments == 0 && target.isFile && target.length() > 0L) {
-            val previous = runCatching { JSONObject(target.readText(Charsets.UTF_8)) }.getOrNull()
-            val previousLoans = previous?.optJSONArray("loans")?.length() ?: 0
-            val previousPayments = previous?.optJSONArray("payments")?.length() ?: 0
-            if (previousLoans > 0 || previousPayments > 0) {
-                throw IOException("Kept the existing backup with $previousLoans loans and $previousPayments repayments. The current app database is empty, so it was not allowed to overwrite your records.")
+    private fun readShared(context: Context): String? {
+        val uri = findSharedBackup(context) ?: return null
+        return context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+    }
+
+    private fun countRecords(json: String): Pair<Int, Int> {
+        val root = JSONObject(json)
+        return (root.optJSONArray("loans")?.length() ?: 0) to
+            (root.optJSONArray("payments")?.length() ?: 0)
+    }
+
+    fun writeAutomatic(context: Context, plainText: String): Uri {
+        val incomingCounts = countRecords(plainText)
+        val previousText = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            readShared(context)
+        } else {
+            val oldFile = automaticBackupFile(context)
+            if (oldFile.isFile && oldFile.length() > 0L) oldFile.readText(Charsets.UTF_8) else null
+        }
+        if (incomingCounts.first == 0 && incomingCounts.second == 0 && previousText != null) {
+            val previousCounts = runCatching { countRecords(previousText) }.getOrNull()
+            if (previousCounts != null && (previousCounts.first > 0 || previousCounts.second > 0)) {
+                throw IOException("Kept the existing backup with ${previousCounts.first} loans and ${previousCounts.second} repayments. The current app database is empty, so it was not allowed to overwrite your records.")
             }
         }
 
-        // Write to a temporary file first, so an interrupted write cannot leave a truncated backup.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = context.contentResolver
+            val existing = findSharedBackup(context)
+            val uri = existing ?: resolver.insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, BACKUP_NAME)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                    put(MediaStore.Downloads.RELATIVE_PATH, RELATIVE_PATH)
+                }
+            ) ?: throw IOException("Could not create Download/FundNiti/Backup folder")
+            try {
+                resolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+                    writer.write(plainText)
+                    writer.flush()
+                } ?: throw IOException("Could not write the shared backup file")
+            } catch (e: Exception) {
+                if (existing == null) runCatching { resolver.delete(uri, null, null) }
+                throw e
+            }
+            return uri
+        }
+
+        val target = automaticBackupFile(context)
+        val parent = target.parentFile ?: throw IOException("Backup folder is unavailable")
+        if (!parent.exists() && !parent.mkdirs()) throw IOException("Could not create the backup folder")
         val temporary = File(parent, target.name + ".tmp")
         temporary.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write(plainText)
@@ -169,10 +226,23 @@ object DurableBackup {
             temporary.copyTo(target, overwrite = true)
             temporary.delete()
         }
-        return target
+        return Uri.fromFile(target)
     }
 
     fun readAutomatic(context: Context): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            readShared(context)?.let { return it }
+            // Migrate a previous app-specific backup into shared Downloads on first run after update.
+            val legacy = runCatching {
+                val file = automaticBackupFile(context)
+                if (file.isFile && file.length() > 0L) file.readText(Charsets.UTF_8) else null
+            }.getOrNull()
+            if (legacy != null) {
+                runCatching { writeAutomatic(context, legacy) }
+                return legacy
+            }
+            return null
+        }
         val file = automaticBackupFile(context)
         return if (file.isFile && file.length() > 0L) file.readText(Charsets.UTF_8) else null
     }
