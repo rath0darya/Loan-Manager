@@ -118,6 +118,28 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+private fun modernTypography(): androidx.compose.material3.Typography {
+    val base = androidx.compose.material3.Typography()
+    val font = FontFamily.SansSerif
+    return base.copy(
+        displayLarge = base.displayLarge.copy(fontFamily = font),
+        displayMedium = base.displayMedium.copy(fontFamily = font),
+        displaySmall = base.displaySmall.copy(fontFamily = font),
+        headlineLarge = base.headlineLarge.copy(fontFamily = font),
+        headlineMedium = base.headlineMedium.copy(fontFamily = font),
+        headlineSmall = base.headlineSmall.copy(fontFamily = font),
+        titleLarge = base.titleLarge.copy(fontFamily = font),
+        titleMedium = base.titleMedium.copy(fontFamily = font),
+        titleSmall = base.titleSmall.copy(fontFamily = font),
+        bodyLarge = base.bodyLarge.copy(fontFamily = font),
+        bodyMedium = base.bodyMedium.copy(fontFamily = font),
+        bodySmall = base.bodySmall.copy(fontFamily = font),
+        labelLarge = base.labelLarge.copy(fontFamily = font),
+        labelMedium = base.labelMedium.copy(fontFamily = font),
+        labelSmall = base.labelSmall.copy(fontFamily = font)
+    )
+}
+
 private enum class AppPage(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     Loans("Loans", Icons.Filled.AccountBalance),
@@ -283,7 +305,7 @@ private fun LoanManagerApp() {
         }
     }
 
-    MaterialTheme(colorScheme = appColorScheme, typography = androidx.compose.material3.Typography(defaultFontFamily = FontFamily.SansSerif)) {
+    MaterialTheme(colorScheme = appColorScheme, typography = modernTypography()) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
