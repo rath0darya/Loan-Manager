@@ -808,7 +808,7 @@ private fun CalculatorsScreen(modifier: Modifier) {
     ) {
         Text("Loan calculators", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "Both calculators use FundNiti's fixed monthly simple-interest rule: one full monthly interest amount per completed calendar month, then monthly interest ÷ 30 for each extra day.",
+            "Estimate interest or calculate the exact calendar duration between two dates. Share a clear, ready-to-send result directly to your favourite social app.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -879,6 +879,16 @@ private fun InterestCalculatorCard() {
                 HorizontalResultLine("Interest amount", money(interest))
                 HorizontalResultLine("Principal + interest", money(principal!! + interest))
                 HorizontalResultLine("Duration", "${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days")
+                androidx.compose.material3.Button(
+                    onClick = {
+                        shareCalculatorResult(
+                            LocalContext.current,
+                            "Interest Calculator",
+                            "INTEREST CALCULATION RESULT\\nPrincipal: ${money(principal!!)}\\nMonthly interest rate: ${rateText}%\\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\\nInterest amount: ${money(interest)}\\nPrincipal + interest: ${money(principal + interest)}"
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Share result") }
             } else {
                 Text("Enter a positive principal, a non-negative rate, and a valid duration.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -890,23 +900,19 @@ private fun InterestCalculatorCard() {
 @Composable
 private fun TenureCalculatorCard() {
     val context = LocalContext.current
-    var principalText by remember { mutableStateOf("") }
-    var rateText by remember { mutableStateOf("") }
+    val zone = ZoneId.systemDefault()
     var fromDateMillis by remember {
-        mutableStateOf(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+        mutableStateOf(LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli())
     }
     var toDateMillis by remember {
-        mutableStateOf(LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+        mutableStateOf(LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli())
     }
-    val principal = parseAmount(principalText)
-    val rate = rateText.replace(",", "").trim().toDoubleOrNull()
-    val zone = ZoneId.systemDefault()
     val fromDate = Instant.ofEpochMilli(fromDateMillis).atZone(zone).toLocalDate()
     val toDate = Instant.ofEpochMilli(toDateMillis).atZone(zone).toLocalDate()
-    val valid = principal != null && principal > 0.0 &&
-        rate != null && rate >= 0.0 && !toDate.isBefore(fromDate)
-    val period = if (valid) java.time.Period.between(fromDate, toDate) else null
-    val interest = if (valid) accruedInterest(principal!!, rate!!, fromDateMillis, toDateMillis) else null
+    val valid = !toDate.isBefore(fromDate)
+    val period = if (valid) Period.between(fromDate, toDate) else null
+    val totalDays = if (valid) ChronoUnit.DAYS.between(fromDate, toDate) else 0L
+    val totalMonths = period?.let { it.years * 12 + it.months } ?: 0
 
     Card(
         Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
@@ -916,30 +922,18 @@ private fun TenureCalculatorCard() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Tenure Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
-                "Choose a start date and end date to calculate the exact calendar months and remaining days. Interest follows the same loan rule: full monthly interest for each completed calendar month, then monthly interest ÷ 30 for each extra day.",
+                "Select only the From date and To date. FundNiti calculates the exact calendar months and remaining days, plus the total number of days.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            OutlinedTextField(
-                principalText, { principalText = amountInputFormat(it) },
-                modifier = Modifier.fillMaxWidth(), label = { Text("Principal amount (₹)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
-            )
-            OutlinedTextField(
-                rateText, { rateText = it.filter { c -> c.isDigit() || c == '.' }.take(8) },
-                modifier = Modifier.fillMaxWidth(), label = { Text("Fixed monthly interest rate (%)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true
-            )
             TextButton(onClick = {
                 val selected = java.util.Calendar.getInstance().apply { timeInMillis = fromDateMillis }
-                android.app.DatePickerDialog(
+                DatePickerDialog(
                     context,
                     { _, year, month, day ->
                         val selectedDate = LocalDate.of(year, month + 1, day)
                         fromDateMillis = selectedDate.atStartOfDay(zone).toInstant().toEpochMilli()
-                        if (toDate.isBefore(selectedDate)) {
-                            toDateMillis = fromDateMillis
-                        }
+                        if (toDate.isBefore(selectedDate)) toDateMillis = fromDateMillis
                     },
                     selected.get(java.util.Calendar.YEAR),
                     selected.get(java.util.Calendar.MONTH),
@@ -950,7 +944,7 @@ private fun TenureCalculatorCard() {
             }
             TextButton(onClick = {
                 val selected = java.util.Calendar.getInstance().apply { timeInMillis = toDateMillis }
-                android.app.DatePickerDialog(
+                DatePickerDialog(
                     context,
                     { _, year, month, day ->
                         toDateMillis = LocalDate.of(year, month + 1, day)
@@ -963,27 +957,54 @@ private fun TenureCalculatorCard() {
             }, modifier = Modifier.fillMaxWidth()) {
                 Text("To date: ${formatDate(toDateMillis)}")
             }
-            when {
-                principal == null || principal <= 0.0 || rate == null || rate < 0.0 -> {
-                    Text("Enter a positive principal amount and a non-negative monthly interest rate.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            if (valid && period != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Calculated duration", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        Text("$totalMonths months, ${period.days} days", style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        HorizontalResultLine("Total days", "$totalDays days")
+                    }
                 }
-                period != null && interest != null -> {
-                    HorizontalResultLine("Total duration", "${period.months + period.years * 12} months, ${period.days} days")
-                    HorizontalResultLine("Total days", "${java.time.temporal.ChronoUnit.DAYS.between(fromDate, toDate)} days")
-                    HorizontalResultLine("Interest for this period", money(interest))
-                    HorizontalResultLine("Principal + interest", money(principal + interest))
-                    Text(
-                        "Calendar months use the actual dates, including 28/29/30/31-day months. Extra days earn 1/30 of the monthly interest per day. This is an estimate and does not change saved loans.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                else -> Text("The end date must not be before the start date.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                androidx.compose.material3.Button(
+                    onClick = {
+                        shareCalculatorResult(
+                            context,
+                            "Tenure Calculator",
+                            "DATE DURATION RESULT\\nFrom: ${formatDate(fromDateMillis)}\\nTo: ${formatDate(toDateMillis)}\\nDuration: $totalMonths months, ${period.days} days\\nTotal days: $totalDays"
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Share result") }
+                Text(
+                    "Calendar months follow the selected dates, including different month lengths and leap years. This calculation does not change saved loan records.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
+}
+
+private fun shareCalculatorResult(context: android.content.Context, title: String, result: String) {
+    val shareText = buildString {
+        append("FundNiti • Personal lending, clearly organised\\n")
+        append("────────────────────────\\n")
+        append(result)
+        append("\\n\\nCalculated with FundNiti. For reference only; not a saved loan record.")
+    }
+    val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_SUBJECT, "FundNiti — $title")
+        putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+    }
+    context.startActivity(android.content.Intent.createChooser(sendIntent, "Share FundNiti result"))
 }
 
 @Composable
