@@ -36,7 +36,7 @@ internal fun requestFingerprintUnlock(
             override fun onAuthenticationFailed() {
                 failures += 1
                 onFailureCount(failures)
-                if (failures >= 2) prompt.cancelAuthentication()
+                if (failures >= 3) prompt.cancelAuthentication()
             }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
