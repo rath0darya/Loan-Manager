@@ -550,8 +550,18 @@ private fun LoanDialog(
         title = { Text(if (existing == null) "Add loan" else "Edit loan") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name1, { name1 = it }, label = { Text(if (direction == "LENT") "Borrower 1 name" else "Lender 1 name") }, singleLine = true)
-                OutlinedTextField(name2, { name2 = it }, label = { Text(if (direction == "LENT") "Borrower 2 name (optional)" else "Lender 2 name (optional)") }, singleLine = true)
+                OutlinedTextField(
+                    name1, { name1 = it },
+                    label = { Text(if (direction == "LENT") "Lent From" else "Borrower From") },
+                    supportingText = { Text(if (direction == "LENT") "Person or source the money was lent from" else "Person the money was borrowed from") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    name2, { name2 = it },
+                    label = { Text(if (direction == "LENT") "Lent Name" else "Borrower Name") },
+                    supportingText = { Text(if (direction == "LENT") "Person who received the loan" else "Person who borrowed the money") },
+                    singleLine = true
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.FilterChip(selected = direction == "LENT", onClick = { direction = "LENT" }, label = { Text("I lent") })
                     androidx.compose.material3.FilterChip(selected = direction == "BORROWED", onClick = { direction = "BORROWED" }, label = { Text("I borrowed") })
