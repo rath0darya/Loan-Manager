@@ -46,7 +46,10 @@ object EncryptedBackup {
         bytes.size >= MAGIC.size && bytes.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)
 
     fun automaticBackupFile(context: Context): File {
-        val root = context.getExternalFilesDir(null) ?: context.filesDir
+        // Mirrors WhatsApp's Android/media/<package>/<app>/... folder pattern.
+        val root = context.externalMediaDirs.firstOrNull()
+            ?: context.getExternalFilesDir(null)
+            ?: context.filesDir
         return File(root, "Lendora/backup/Lendora-Backup.lendora")
     }
 
