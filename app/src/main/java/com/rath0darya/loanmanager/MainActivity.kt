@@ -140,27 +140,16 @@ private fun LoanManagerApp() {
     }
 
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri: Uri? ->
         if (uri != null) scope.launch {
             try {
-                val root = JSONObject()
-                val loanArray = JSONArray()
-                dao.allLoans().forEach { loan ->
-                    loanArray.put(JSONObject().put("id", loan.id).put("personName", loan.personName).put("personName2", loan.personName2)
-                        .put("direction", loan.direction).put("principal", loan.principal)
-                        .put("monthlyRate", loan.monthlyRate).put("startDate", loan.startDate)
-                        .put("dueDate", loan.dueDate ?: JSONObject.NULL).put("note", loan.note))
-                }
-                val paymentArray = JSONArray()
-                dao.allPayments().forEach { payment ->
-                    paymentArray.put(JSONObject().put("id", payment.id).put("loanId", payment.loanId)
-                        .put("amount", payment.amount).put("paidAt", payment.paidAt).put("note", payment.note))
-                }
-                root.put("formatVersion", 2).put("exportedAt", System.currentTimeMillis())
-                    .put("loans", loanArray).put("payments", paymentArray)
-                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
-                snackbarHostState.showSnackbar("Backup saved")
+                val json = createBackupJson(dao)
+                val encrypted = EncryptedBackup.encrypt(json)
+                context.contentResolver.openOutputStream(uri)?.use { it.write(encrypted) }
+                    ?: error("Could not write the backup file")
+                snackbarHostState.showSnackbar("Encrypted backup saved")
+
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Backup failed: ${e.localizedMessage ?: "unknown error"}")
             }
@@ -171,8 +160,9 @@ private fun LoanManagerApp() {
     ) { uri: Uri? ->
         if (uri != null) scope.launch {
             try {
-                val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                     ?: error("Could not read the selected file")
+                val text = EncryptedBackup.decrypt(bytes)
                 val root = JSONObject(text)
                 val loanArray = root.getJSONArray("loans")
                 val paymentArray = root.getJSONArray("payments")
@@ -207,7 +197,8 @@ private fun LoanManagerApp() {
                         ))
                     }
                 }
-                snackbarHostState.showSnackbar("Backup restored")
+                EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
+                snackbarHostState.showSnackbar("Backup restored and local encrypted backup refreshed")
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Restore failed: ${e.localizedMessage ?: "invalid backup"}")
             }
@@ -284,6 +275,7 @@ private fun LoanManagerApp() {
                     onEdit = { editLoan = it },
                     onDelete = { loan -> scope.launch {
                         dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
+                        EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
                         snackbarHostState.showSnackbar("Loan deleted")
                     } }
                 )
@@ -293,8 +285,8 @@ private fun LoanManagerApp() {
                 )
                 AppPage.Backup -> BackupScreen(
                     Modifier.padding(padding),
-                    onExport = { exportLauncher.launch("Lendora-Backup.json") },
-                    onImport = { importLauncher.launch(arrayOf("application/json", "text/*")) }
+                    onExport = { exportLauncher.launch("Lendora-Backup.lendora") },
+                    onImport = { importLauncher.launch(arrayOf("application/octet-stream", "application/json", "text/*")) }
                 )
             }
         }
@@ -323,6 +315,7 @@ private fun LoanManagerApp() {
                         dao.updateLoan(savedLoan)
                         editing.id
                     }
+                    EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
                     if (due != null) {
                         val delay = (due - System.currentTimeMillis()).coerceAtLeast(0L)
                         val request = OneTimeWorkRequestBuilder<LoanReminderWorker>()
@@ -345,6 +338,7 @@ private fun LoanManagerApp() {
             scope.launch {
                 dao.addPayment(PaymentEntity(loanId = loan.id, amount = amount,
                     paidAt = System.currentTimeMillis(), note = note.trim()))
+                EncryptedBackup.writeAutomatic(context, createBackupJson(dao))
                 paymentFor = null
                 snackbarHostState.showSnackbar("Payment recorded")
             }
@@ -665,7 +659,7 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Back up records", style = MaterialTheme.typography.titleMedium)
-                Text("Save loans and payment history as a portable JSON file.")
+                Text("Automatically keeps an AES-GCM encrypted local backup. Exported .lendora backups are encrypted too.")
                 Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export backup") }
             }
         }
@@ -673,11 +667,11 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Restore records", style = MaterialTheme.typography.titleMedium)
-                Text("Restoring replaces the current local records with the selected backup.")
+                Text("Restore an encrypted .lendora backup or an older JSON backup. Restoring replaces current records.")
                 Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Choose backup file") }
             }
         }
-        Text("Tip: save a copy to Downloads or an SD card. Restoring a backup overwrites existing loan records.",
+        Text("Local backup folder: Android/data/com.rath0darya.loanmanager/files/Lendora/backup. The encrypted backup key is stored in Android Keystore, so this automatic backup is intended for this app installation/device. Export a copy before changing phones or reinstalling.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
