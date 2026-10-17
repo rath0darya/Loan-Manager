@@ -11,6 +11,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -66,7 +69,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -217,16 +224,21 @@ private fun LoanManagerApp() {
 
     MaterialTheme(
         colorScheme = androidx.compose.material3.lightColorScheme(
-            primary = androidx.compose.ui.graphics.Color(0xFF145A46),
-            onPrimary = androidx.compose.ui.graphics.Color.White,
-            secondary = androidx.compose.ui.graphics.Color(0xFFB5D8C8),
-            background = androidx.compose.ui.graphics.Color(0xFFF6F8F6),
-            surface = androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+            primary = Color(0xFF126B55),
+            onPrimary = Color.White,
+            secondary = Color(0xFFB5D8C8),
+            background = Color(0xFFF2F7F5),
+            surface = Color(0xFFF9FCFB),
+            surfaceVariant = Color(0xFFE5F0EB),
+            tertiary = Color(0xFF4C86D9)
         )
     ) {
         Scaffold(
             topBar = {
                 TopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFFF2F7F5)
+                    ),
                     title = {
                         Column {
                             Text("Loan Manager", fontWeight = FontWeight.Bold)
@@ -237,7 +249,7 @@ private fun LoanManagerApp() {
                 )
             },
             bottomBar = {
-                NavigationBar {
+                NavigationBar(containerColor = Color(0xFFEAF3EF)) {
                     AppPage.entries.forEach { item ->
                         NavigationBarItem(
                             selected = page == item,
@@ -470,28 +482,160 @@ private fun StatisticsScreen(
 ) {
     val lent = loans.filter { it.direction == "LENT" }
     val borrowed = loans.filter { it.direction == "BORROWED" }
+    val lentBalance = lent.sumOf(balance)
+    val borrowedBalance = borrowed.sumOf(balance)
     val paymentSum = payments.sumOf { it.amount }
     val monthlyInterest = loans.sumOf { it.principal * it.monthlyRate / 100.0 }
-    val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2).filter { it.isNotBlank() }.map { it to loan } }.groupBy({ it.first }, { it.second }).maxByOrNull { entry -> entry.value.distinctBy { it.id }.sumOf(balance) }
+    val peopleCount = loans.flatMap { listOf(it.personName, it.personName2) }
+        .filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size
+    val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2)
+        .filter { it.isNotBlank() }.map { it to loan } }
+        .groupBy({ it.first }, { it.second })
+        .maxByOrNull { entry -> entry.value.distinctBy { it.id }.sumOf(balance) }
+    val monthlyPayments = (5 downTo 0).map { offset ->
+        val month = java.time.YearMonth.now().minusMonths(offset.toLong())
+        val total = payments.filter {
+            java.time.Instant.ofEpochMilli(it.paidAt).atZone(java.time.ZoneId.systemDefault())
+                .let { date -> date.year == month.year && date.monthValue == month.monthValue }
+        }.sumOf { it.amount }
+        month.month.name.take(3) to total
+    }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Portfolio overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        StatCard("Outstanding across all records", money(outstanding), Modifier.fillMaxWidth())
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text("Financial insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("A visual snapshot of your lending portfolio", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        StatCard("Total outstanding", money(outstanding), Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatCard("Money lent", money(lent.sumOf(balance)), Modifier.weight(1f))
-            StatCard("Money borrowed", money(borrowed.sumOf(balance)), Modifier.weight(1f))
+            StatCard("Money lent", money(lentBalance), Modifier.weight(1f))
+            StatCard("Money borrowed", money(borrowedBalance), Modifier.weight(1f))
         }
+        GlassPanel(title = "Portfolio split", subtitle = "Outstanding balance by direction") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                PortfolioDonut(lentBalance, borrowedBalance, Modifier.size(132.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
+                    LegendRow("Money lent", Color(0xFF16866B), money(lentBalance))
+                    LegendRow("Money borrowed", Color(0xFF5B8DE5), money(borrowedBalance))
+                }
+            }
+        }
+        GlassPanel(title = "Lent vs borrowed", subtitle = "Compare outstanding totals at a glance") {
+            ComparisonBar("Lent", lentBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF16866B))
+            ComparisonBar("Borrowed", borrowedBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF5B8DE5))
+        }
+        GlassPanel(title = "Repayment activity", subtitle = "Payments recorded in the last 6 months") {
+            PaymentBars(monthlyPayments)
+        }
+        Text("Key metrics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Original principal", money(principal), Modifier.weight(1f))
-            StatCard("Payments received/paid", money(paymentSum), Modifier.weight(1f))
+            StatCard("Payments total", money(paymentSum), Modifier.weight(1f))
         }
-        StatCard("Estimated monthly interest", money(monthlyInterest), Modifier.fillMaxWidth())
-        StatCard("Loan records", loans.size.toString(), Modifier.fillMaxWidth())
-        StatCard("People", loans.flatMap { listOf(it.personName, it.personName2) }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size.toString(), Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatCard("Monthly interest", money(monthlyInterest), Modifier.weight(1f))
+            StatCard("Loan records", loans.size.toString(), Modifier.weight(1f))
+        }
+        StatCard("People tracked", peopleCount.toString(), Modifier.fillMaxWidth())
         StatCard("Highest outstanding person", maxPerson?.key ?: "—", Modifier.fillMaxWidth())
-        Text("Balances include simple interest for completed months and subtract recorded payments. Interest is calculated on the original principal; confirm that this matches your agreement before relying on the totals.",
+        Text("Balances include simple interest for completed months and subtract recorded payments. Interest is calculated on original principal; confirm that this matches your agreement before relying on totals.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+@Composable
+private fun GlassPanel(title: String, subtitle: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun PortfolioDonut(lent: Double, borrowed: Double, modifier: Modifier = Modifier) {
+    val total = lent + borrowed
+    Canvas(modifier) {
+        val stroke = 24.dp.toPx()
+        val diameter = size.minDimension - stroke
+        val topLeft = androidx.compose.ui.geometry.Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+        val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
+        drawArc(Color(0xFFE4ECE8), -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        if (total > 0.0) {
+            val lentSweep = (lent / total * 360.0).toFloat()
+            drawArc(Color(0xFF16866B), -90f, lentSweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(Color(0xFF5B8DE5), -90f + lentSweep, (borrowed / total * 360.0).toFloat(), false,
+                topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        }
+    }
+}
+
+@Composable
+private fun LegendRow(label: String, color: Color, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(Modifier.size(10.dp), shape = RoundedCornerShape(50), color = color) {}
+        Column {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun ComparisonBar(label: String, value: Double, maxValue: Double, color: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(money(value), style = MaterialTheme.typography.labelLarge)
+        }
+        androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxWidth().height(12.dp).background(Color(0xFFE6EEEA), RoundedCornerShape(50))
+        ) {
+            val fraction = if (maxValue <= 0.0) 0f else (value / maxValue).toFloat().coerceIn(0f, 1f)
+            androidx.compose.foundation.layout.Box(
+                Modifier.fillMaxWidth(fraction).height(12.dp).background(color, RoundedCornerShape(50))
+            )
+        }
+    }
+}
+
+@Composable
+private fun PaymentBars(data: List<Pair<String, Double>>) {
+    val maxValue = data.maxOfOrNull { it.second } ?: 0.0
+    Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Bottom) {
+        data.forEach { (month, amount) ->
+            Column(Modifier.weight(1f).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom) {
+                Text(if (amount > 0) shortMoney(amount) else "—", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Spacer(Modifier.height(5.dp))
+                val fraction = if (maxValue <= 0.0) 0.025f else (amount / maxValue).toFloat().coerceIn(0.025f, 1f)
+                androidx.compose.foundation.layout.Box(
+                    Modifier.fillMaxWidth(0.72f).fillMaxHeight(fraction).background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF77CDB2), Color(0xFF126B55))),
+                        RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)
+                    )
+                )
+                Spacer(Modifier.height(7.dp))
+                Text(month, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+private fun shortMoney(value: Double): String = when {
+    value >= 10000000 -> "₹%.1fCr".format(Locale.getDefault(), value / 10000000)
+    value >= 100000 -> "₹%.1fL".format(Locale.getDefault(), value / 100000)
+    value >= 1000 -> "₹%.1fK".format(Locale.getDefault(), value / 1000)
+    else -> "₹%.0f".format(Locale.getDefault(), value)
 }
 
 @Composable
@@ -628,10 +772,16 @@ private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, String) -> Uni
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    Card(
+        modifier = modifier.border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xDFFFFFFF)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary)
         }
     }
 }
