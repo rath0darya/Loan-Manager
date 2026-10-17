@@ -172,11 +172,31 @@ object DurableBackup {
 }
 
 internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: String) {
-    val root = JSONObject(text)
-    val loanArray = root.getJSONArray("loans")
-    val paymentArray = root.getJSONArray("payments")
+    val cleaned = text.trim().removePrefix("\uFEFF").trim()
+    val root = try {
+        JSONObject(cleaned)
+    } catch (e: Exception) {
+        throw IOException("This file is not a readable FundNiti backup. Choose the exported .lendora backup or the Lendora-Data.json device backup.", e)
+    }
+    // Accept both current portable JSON and older backup field names.
+    val loanArray = root.optJSONArray("loans")
+        ?: root.optJSONArray("loanRecords")
+        ?: throw IOException("Backup is missing its loans list. Choose FundNiti-Backup.lendora or Lendora-Data.json.")
+    val paymentArray = root.optJSONArray("payments") ?: root.optJSONArray("repayments") ?: JSONArray()
     if (loanArray.length() == 0 && paymentArray.length() == 0) {
-        throw IOException("This backup contains 0 loans and 0 repayments. No data was restored. Check that you selected the correct Lendora-Data.json file.")
+        throw IOException("This backup has no loans or repayments. No data was changed.")
+    }
+    for (i in 0 until loanArray.length()) {
+        val item = loanArray.optJSONObject(i) ?: throw IOException("Backup loan record " + (i + 1) + " is damaged. No data was changed.")
+        if (!item.has("personName") || !item.has("principal") || !item.has("startDate")) {
+            throw IOException("Backup loan record " + (i + 1) + " is missing required details. No data was changed.")
+        }
+    }
+    for (i in 0 until paymentArray.length()) {
+        val item = paymentArray.optJSONObject(i) ?: throw IOException("Backup payment record " + (i + 1) + " is damaged. No data was changed.")
+        if (!item.has("loanId") || !item.has("amount") || !item.has("paidAt")) {
+            throw IOException("Backup payment record " + (i + 1) + " is missing required details. No data was changed.")
+        }
     }
     db.withTransaction {
         dao.clearPayments()
