@@ -690,7 +690,7 @@ private fun LoanDialog(
     var name1 by remember(existing?.id) { mutableStateOf(existing?.personName ?: "") }
     var name2 by remember(existing?.id) { mutableStateOf(existing?.personName2 ?: "") }
     var direction by remember(existing?.id) { mutableStateOf(existing?.direction ?: "LENT") }
-    var principal by remember(existing?.id) { mutableStateOf(existing?.principal?.let(::amountInputFormat) ?: "") }
+    var principal by remember(existing?.id) { mutableStateOf(existing?.principal?.let { amountInputFormat(it.toString()) } ?: "") }
     var rate by remember(existing?.id) { mutableStateOf(existing?.monthlyRate?.toString() ?: "") }
     var startDateText by remember(existing?.id) {
         mutableStateOf(existing?.startDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toString() } ?: LocalDate.now().toString())
