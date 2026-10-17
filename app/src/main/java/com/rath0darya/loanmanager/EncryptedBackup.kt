@@ -127,8 +127,7 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
 object DurableBackup {
     fun automaticBackupFile(context: Context): File {
         val root = context.externalMediaDirs.firstOrNull()
-            ?: context.getExternalFilesDir(null)
-            ?: context.filesDir
+            ?: throw IOException("Shared Android/media storage is unavailable on this device")
         return File(root, "Lendora/backup/Lendora-Data.json")
     }
 
