@@ -135,10 +135,29 @@ object DurableBackup {
         val target = automaticBackupFile(context)
         val parent = target.parentFile ?: throw IOException("Backup folder is unavailable")
         if (!parent.exists() && !parent.mkdirs()) throw IOException("Could not create the Android backup folder")
-        // Write in place so no backup deletion operation or storage permission is needed.
-        target.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
+
+        // Never let an empty database silently destroy a previously useful device backup.
+        val incoming = JSONObject(plainText)
+        val incomingLoans = incoming.optJSONArray("loans")?.length() ?: 0
+        val incomingPayments = incoming.optJSONArray("payments")?.length() ?: 0
+        if (incomingLoans == 0 && incomingPayments == 0 && target.isFile && target.length() > 0L) {
+            val previous = runCatching { JSONObject(target.readText(Charsets.UTF_8)) }.getOrNull()
+            val previousLoans = previous?.optJSONArray("loans")?.length() ?: 0
+            val previousPayments = previous?.optJSONArray("payments")?.length() ?: 0
+            if (previousLoans > 0 || previousPayments > 0) {
+                throw IOException("Kept the existing backup with $previousLoans loans and $previousPayments repayments. The current app database is empty, so it was not allowed to overwrite your records.")
+            }
+        }
+
+        // Write to a temporary file first, so an interrupted write cannot leave a truncated backup.
+        val temporary = File(parent, target.name + ".tmp")
+        temporary.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write(plainText)
             writer.flush()
+        }
+        if (!temporary.renameTo(target)) {
+            temporary.copyTo(target, overwrite = true)
+            temporary.delete()
         }
         return target
     }
@@ -153,6 +172,9 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
     val root = JSONObject(text)
     val loanArray = root.getJSONArray("loans")
     val paymentArray = root.getJSONArray("payments")
+    if (loanArray.length() == 0 && paymentArray.length() == 0) {
+        throw IOException("This backup contains 0 loans and 0 repayments. No data was restored. Check that you selected the correct Lendora-Data.json file.")
+    }
     db.withTransaction {
         dao.clearPayments()
         dao.clearLoans()
