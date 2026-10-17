@@ -295,15 +295,18 @@ private fun LoanManagerApp() {
                 )
             },
             bottomBar = {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    AppPage.entries.forEach { item ->
-                        NavigationBarItem(
-                            selected = page == item,
-                            onClick = { page = item },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) }
-                        )
+                Column {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                        AppPage.entries.forEach { item ->
+                            NavigationBarItem(
+                                selected = page == item,
+                                onClick = { page = item },
+                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                label = { Text(item.label) }
+                            )
+                        }
                     }
+                    Text("Developed with ♥️ Aravind", modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 5.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
@@ -1267,11 +1270,17 @@ private fun PaymentDialog(onDismiss: () -> Unit, onSave: (Double, Long, String, 
                     supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
                     singleLine = true
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    androidx.compose.material3.FilterChip(selected = method == "Cash", onClick = { method = "Cash"; reference = "" }, label = { Text("Cash") })
-                    androidx.compose.material3.FilterChip(selected = method == "UPI", onClick = { method = "UPI" }, label = { Text("UPI") })
-                    androidx.compose.material3.FilterChip(selected = method == "Bank", onClick = { method = "Bank" }, label = { Text("Bank") })
-                    androidx.compose.material3.FilterChip(selected = method == "Other", onClick = { method = "Other" }, label = { Text("Other") })
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        androidx.compose.material3.FilterChip(selected = method == "Cash", onClick = { method = "Cash"; reference = "" }, label = { Text("Cash") })
+                        androidx.compose.material3.FilterChip(selected = method == "UPI", onClick = { method = "UPI" }, label = { Text("UPI") })
+                        androidx.compose.material3.FilterChip(selected = method == "NEFT", onClick = { method = "NEFT" }, label = { Text("NEFT") })
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        androidx.compose.material3.FilterChip(selected = method == "IMPS", onClick = { method = "IMPS" }, label = { Text("IMPS") })
+                        androidx.compose.material3.FilterChip(selected = method == "RTGS", onClick = { method = "RTGS" }, label = { Text("RTGS") })
+                        androidx.compose.material3.FilterChip(selected = method == "Other", onClick = { method = "Other" }, label = { Text("Other") })
+                    }
                 }
                 if (method != "Cash") OutlinedTextField(reference, { reference = it }, label = { Text(if (method == "UPI") "UPI UTR number" else "Transaction / reference number") }, singleLine = true)
                 TextButton(onClick = {
