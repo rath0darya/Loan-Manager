@@ -12,7 +12,7 @@ internal fun hashAppPin(pin: String, salt: String): String {
 }
 
 internal fun canUseFingerprint(activity: FragmentActivity): Boolean =
-    BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+    BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
         BiometricManager.BIOMETRIC_SUCCESS
 
 internal fun requestFingerprintUnlock(
@@ -22,7 +22,7 @@ internal fun requestFingerprintUnlock(
     onError: (String) -> Unit
 ) {
     val manager = BiometricManager.from(activity)
-    if (manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) != BiometricManager.BIOMETRIC_SUCCESS) {
+    if (manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) != BiometricManager.BIOMETRIC_SUCCESS) {
         onError("Fingerprint is not set up or is unavailable. Enter your 6-digit PIN instead.")
         return
     }
@@ -49,7 +49,7 @@ internal fun requestFingerprintUnlock(
     val info = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Unlock FundNiti")
         .setSubtitle("Touch the fingerprint sensor")
-        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         .setNegativeButtonText("Use PIN")
         .build()
     prompt.authenticate(info)
