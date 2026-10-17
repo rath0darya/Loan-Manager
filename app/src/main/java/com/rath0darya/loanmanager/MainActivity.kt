@@ -301,6 +301,29 @@ private fun LoanManagerApp() {
                             }
                         }
                     },
+                    onRecoverDeviceBackup = {
+                        scope.launch {
+                            try {
+                                backupStatus = withContext(Dispatchers.IO) {
+                                    val existingLoans = dao.allLoans()
+                                    val existingPayments = dao.allPayments()
+                                    if (existingLoans.isNotEmpty() || existingPayments.isNotEmpty()) {
+                                        "Recovery skipped: this app already has ${existingLoans.size} loans and ${existingPayments.size} repayments. Current records were not replaced."
+                                    } else {
+                                        val saved = DurableBackup.readAutomatic(context)
+                                            ?: error("No Android folder backup was found")
+                                        restoreBackupJson(db, dao, saved)
+                                        DurableBackup.writeAutomatic(context, createBackupJson(dao))
+                                        "Recovered ${dao.allLoans().size} loans and ${dao.allPayments().size} repayments from the Android folder."
+                                    }
+                                }
+                                snackbarHostState.showSnackbar(backupStatus)
+                            } catch (e: Exception) {
+                                backupStatus = "Recovery failed: ${e.localizedMessage ?: "backup unavailable"}"
+                                snackbarHostState.showSnackbar(backupStatus)
+                            }
+                        }
+                    },
                     onExport = { exportLauncher.launch("Lendora-Backup.lendora") },
                     onImport = { importLauncher.launch(arrayOf("application/octet-stream", "application/json", "text/*")) }
                 )
@@ -925,7 +948,7 @@ private fun shortMoney(value: Double): String = when {
 }
 
 @Composable
-private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: () -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
+private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: () -> Unit, onRecoverDeviceBackup: () -> Unit, onExport: () -> Unit, onImport: () -> Unit) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Your data stays on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -945,7 +968,9 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Restore records", style = MaterialTheme.typography.titleMedium)
-                Text("Restore an encrypted .lendora backup or an older JSON backup. Restoring replaces current records.")
+                Text("Load the saved Android folder snapshot directly into the app when the local database is empty. Existing records are never replaced by this one-tap recovery action.")
+                Button(onClick = onRecoverDeviceBackup, modifier = Modifier.fillMaxWidth()) { Text("Load device backup into app") }
+                Text("Or choose a separate backup file. Restoring a selected file replaces current records.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Choose backup file") }
             }
         }
