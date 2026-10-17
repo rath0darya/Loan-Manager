@@ -93,6 +93,7 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
             .put("id", loan.id)
             .put("personName", loan.personName)
             .put("personName2", loan.personName2)
+            .put("personName3", loan.personName3)
             .put("direction", loan.direction)
             .put("principal", loan.principal)
             .put("monthlyRate", loan.monthlyRate)
@@ -107,7 +108,9 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
             .put("loanId", payment.loanId)
             .put("amount", payment.amount)
             .put("paidAt", payment.paidAt)
-            .put("note", payment.note))
+            .put("note", payment.note)
+            .put("paymentMethod", payment.paymentMethod)
+            .put("referenceNumber", payment.referenceNumber))
     }
     root.put("formatVersion", 2)
         .put("exportedAt", System.currentTimeMillis())
@@ -186,6 +189,7 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
             val newId = dao.addLoan(LoanEntity(
                 personName = o.getString("personName"),
                 personName2 = o.optString("personName2", ""),
+                personName3 = o.optString("personName3", ""),
                 direction = o.getString("direction"),
                 principal = o.getDouble("principal"),
                 monthlyRate = o.getDouble("monthlyRate"),
@@ -202,7 +206,9 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
                 loanId = newLoanId,
                 amount = o.getDouble("amount"),
                 paidAt = o.getLong("paidAt"),
-                note = o.optString("note", "")
+                note = o.optString("note", ""),
+                paymentMethod = o.optString("paymentMethod", "Cash"),
+                referenceNumber = o.optString("referenceNumber", "")
             ))
         }
     }
