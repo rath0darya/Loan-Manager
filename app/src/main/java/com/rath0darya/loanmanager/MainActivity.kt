@@ -243,7 +243,7 @@ private fun LoanManagerApp() {
                     ),
                     title = {
                         Column {
-                            Text("Loan Manager", fontWeight = FontWeight.Bold)
+                            Text("Lendora", fontWeight = FontWeight.Bold, color = Color(0xFF123B35))
                             Text(page.label, style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary)
                         }
@@ -291,7 +291,7 @@ private fun LoanManagerApp() {
                 )
                 AppPage.Backup -> BackupScreen(
                     Modifier.padding(padding),
-                    onExport = { exportLauncher.launch("LoanManager-Backup.json") },
+                    onExport = { exportLauncher.launch("Lendora-Backup.json") },
                     onImport = { importLauncher.launch(arrayOf("application/json", "text/*")) }
                 )
             }
