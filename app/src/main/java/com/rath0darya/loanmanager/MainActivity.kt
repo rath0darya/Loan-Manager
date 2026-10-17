@@ -283,7 +283,7 @@ private fun LoanManagerApp() {
         }
     }
 
-    MaterialTheme(colorScheme = appColorScheme) {
+    MaterialTheme(colorScheme = appColorScheme, typography = androidx.compose.material3.Typography(defaultFontFamily = FontFamily.SansSerif)) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
@@ -672,7 +672,7 @@ private fun LoansScreen(
 ) {
     val filtered = loans.filter {
         (it.personName.contains(search, ignoreCase = true) || it.personName2.contains(search, ignoreCase = true)) ||
-            it.direction.contains(search, ignoreCase = true) || it.note.contains(search, ignoreCase = true)
+            it.personName3.contains(search, ignoreCase = true) || it.direction.contains(search, ignoreCase = true) || it.note.contains(search, ignoreCase = true)
     }
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         OutlinedTextField(value = search, onValueChange = onSearch, modifier = Modifier.fillMaxWidth(),
