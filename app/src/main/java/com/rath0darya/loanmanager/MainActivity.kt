@@ -549,6 +549,25 @@ private fun StatisticsScreen(
     val currentCount = loans.count { balance(it) > 0 && (it.dueDate == null || it.dueDate >= System.currentTimeMillis()) }
     val overdueCount = loans.count { balance(it) > 0 && it.dueDate != null && it.dueDate < System.currentTimeMillis() }
     val noDueDateCount = loans.count { balance(it) > 0 && it.dueDate == null }
+    val allocatedByMonth = mutableMapOf<String, Pair<Double, Double>>()
+    loans.forEach { loan ->
+        var interestAlreadyPaid = 0.0
+        payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }.forEach { payment ->
+            val interestAccrued = loan.principal * loan.monthlyRate / 100.0 *
+                completedMonths(loan.startDate, payment.paidAt)
+            val interestDue = (interestAccrued - interestAlreadyPaid).coerceAtLeast(0.0)
+            val interestPart = kotlin.math.min(payment.amount, interestDue)
+            val principalPart = (payment.amount - interestPart).coerceAtLeast(0.0)
+            interestAlreadyPaid += interestPart
+            val monthKey = Instant.ofEpochMilli(payment.paidAt).atZone(ZoneId.systemDefault()).month.name.take(3)
+            val prior = allocatedByMonth[monthKey] ?: (0.0 to 0.0)
+            allocatedByMonth[monthKey] = (prior.first + principalPart) to (prior.second + interestPart)
+        }
+    }
+    val stackedPayments = recentMonths.map { month ->
+        val split = allocatedByMonth[month.month.name.take(3)] ?: (0.0 to 0.0)
+        Triple(month.month.name.take(3), split.first, split.second)
+    }
     val grouped = recentMonths.map { month ->
         val inMonth = loans.filter { loan ->
             Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault())
@@ -588,9 +607,9 @@ private fun StatisticsScreen(
                 }
             }
         }
-        GlassPanel(title = "Stacked column chart · amortization estimate", subtitle = "Monthly payments over the last 6 months") {
-            PaymentBars(paymentBars)
-            Text("The app does not store each payment's principal/interest split, so a true amortization breakdown cannot yet be calculated reliably. This chart shows total payments only.",
+        GlassPanel(title = "Stacked column chart · amortization estimate", subtitle = "Estimated principal vs interest allocation over the last 6 months") {
+            StackedPaymentChart(stackedPayments)
+            Text("Estimate only: recorded payments are allocated to accrued interest first, then principal. Lendora does not store the actual split supplied by the lender.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         GlassPanel(title = "Line chart · outstanding balance", subtitle = "Reconstructed month-end balance over the last 6 months") {
@@ -752,6 +771,42 @@ private fun DataNeededPanel(title: String, description: String) {
 }
 
 @Composable
+private fun StackedPaymentChart(data: List<Triple<String, Double, Double>>) {
+    val maxValue = data.maxOfOrNull { it.second + it.third } ?: 0.0
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.Bottom) {
+            data.forEach { (label, principalPart, interestPart) ->
+                Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom) {
+                    Text(shortMoney(principalPart + interestPart), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    Spacer(Modifier.height(4.dp))
+                    val totalHeight = if (maxValue <= 0.0) 2f else 100f * ((principalPart + interestPart) / maxValue).toFloat()
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.65f).height(totalHeight.dp)) {
+                        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Bottom) {
+                            if (maxValue > 0.0) {
+                                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()
+                                    .height((100f * (interestPart / maxValue).toFloat()).dp)
+                                    .background(Color(0xFF5B8DE5)))
+                                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()
+                                    .height((100f * (principalPart / maxValue).toFloat()).dp)
+                                    .background(Color(0xFF16866B)))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Text(label, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            LegendRow("Principal estimate", Color(0xFF16866B), "Allocated")
+            LegendRow("Interest estimate", Color(0xFF5B8DE5), "Allocated")
+        }
+    }
+}
+
+@Composable
 private fun TrendLineChart(data: List<Pair<String, Double>>) {
     val maxValue = data.maxOfOrNull { it.second } ?: 0.0
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -811,8 +866,8 @@ private fun GroupedDirectionChart(data: List<Triple<String, Double, Double>>) {
             Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Bottom) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
-                    val h1 = if (maxValue <= 0.0) 2.dp else (86f * (lent / maxValue)).dp
-                    val h2 = if (maxValue <= 0.0) 2.dp else (86f * (borrowed / maxValue)).dp
+                    val h1 = if (maxValue <= 0.0) 2.dp else (86f * (lent / maxValue).toFloat()).dp
+                    val h2 = if (maxValue <= 0.0) 2.dp else (86f * (borrowed / maxValue).toFloat()).dp
                     androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h1).background(Color(0xFF16866B), RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
                     Spacer(Modifier.width(3.dp))
                     androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h2).background(Color(0xFF5B8DE5), RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
@@ -833,11 +888,11 @@ private fun CashFlowBridgeChart(data: List<Triple<String, Double, Double>>) {
             Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Bottom) {
                 Text(shortMoney(originations), style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                val h1 = if (maxValue <= 0.0) 2.dp else (78f * (originations / maxValue)).dp
+                val h1 = if (maxValue <= 0.0) 2.dp else (78f * (originations / maxValue).toFloat()).dp
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.62f).height(h1)
                     .background(Color(0xFF16866B), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
                 Spacer(Modifier.height(4.dp))
-                val h2 = if (maxValue <= 0.0) 2.dp else (78f * (repayments / maxValue)).dp
+                val h2 = if (maxValue <= 0.0) 2.dp else (78f * (repayments / maxValue).toFloat()).dp
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.62f).height(h2)
                     .background(Color(0xFFE59B42), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
                 Spacer(Modifier.height(4.dp))
