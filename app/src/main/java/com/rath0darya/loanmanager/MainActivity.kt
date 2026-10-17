@@ -374,7 +374,7 @@ private fun LoanManagerApp() {
                             }
                         }
                     },
-                    onExport = { exportLauncher.launch("Lendora-Backup.lendora") },
+                    onExport = { exportLauncher.launch("FundNiti-Backup.lendora") },
                     onImport = { importLauncher.launch(arrayOf("application/octet-stream", "application/json", "text/*")) }
                 )
             }
@@ -1009,7 +1009,7 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Back up records", style = MaterialTheme.typography.titleMedium)
-                Text("One tap saves every loan and repayment to Android/media/com.rath0darya.loanmanager/Lendora/backup/Lendora-Data.json. On reinstall, Lendora checks this file and restores it automatically when the in-app database is empty.")
+                Text("One tap saves every loan and repayment to Android/media/com.rath0darya.loanmanager/Lendora/backup/Lendora-Data.json. On reinstall, FundNiti checks this file and restores it automatically when the in-app database is empty.")
                 Button(onClick = onBackupNow, modifier = Modifier.fillMaxWidth()) { Text("Back up all data now") }
                 Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export encrypted backup file") }
             }
@@ -1044,11 +1044,11 @@ private fun BackupScreen(modifier: Modifier, backupStatus: String, onBackupNow: 
                         Text("Personal lending, clearly organised", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Text("Lendora is an offline-first loan ledger for tracking money lent and borrowed, people, repayments, due dates and portfolio trends. Your records are stored locally on this device.", style = MaterialTheme.typography.bodyMedium)
+                Text("FundNiti is an offline-first loan ledger for tracking money lent and borrowed, people, repayments, due dates and portfolio trends. Your records are stored locally on this device.", style = MaterialTheme.typography.bodyMedium)
                 Text("Interest method", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("Simple interest on the original principal at the fixed monthly rate. Full monthly anniversary periods receive the full monthly rate; partial periods are prorated by elapsed calendar days divided by the actual days in that monthly period. Recorded payments are deducted from accrued interest plus principal in the displayed outstanding balance.", style = MaterialTheme.typography.bodySmall)
                 Text("Privacy by design", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text("No account, external server, or cloud sync is required. Lendora keeps a portable JSON snapshot in Android/media/com.rath0darya.loanmanager/Lendora/backup and restores it on a fresh install when the local database is empty. This automatic snapshot is not encrypted so reinstalling can read it; protect the file because it contains financial records. Manual encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
+                Text("No account, external server, or cloud sync is required. FundNiti keeps a portable JSON snapshot in Android/media/com.rath0darya.loanmanager/Lendora/backup and restores it on a fresh install when the local database is empty. This automatic snapshot is not encrypted so reinstalling can read it; protect the file because it contains financial records. Manual encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
                 Text("FundNiti · Native Android · Kotlin + Jetpack Compose · Version 1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
