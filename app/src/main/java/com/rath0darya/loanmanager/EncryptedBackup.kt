@@ -39,8 +39,15 @@ object EncryptedBackup {
         val iv = bytes.copyOfRange(MAGIC.size, MAGIC.size + IV_LENGTH)
         val encrypted = bytes.copyOfRange(MAGIC.size + IV_LENGTH, bytes.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
-        return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+        try {
+            cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
+            return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+        } catch (e: Exception) {
+            throw IOException(
+                "This encrypted backup cannot be opened with this installation's key. If this is from a reinstall or another phone, choose the portable Lendora-Data.json backup from Android/media/com.rath0darya.loanmanager/Lendora/backup instead.",
+                e
+            )
+        }
     }
 
     fun isEncrypted(bytes: ByteArray): Boolean =
