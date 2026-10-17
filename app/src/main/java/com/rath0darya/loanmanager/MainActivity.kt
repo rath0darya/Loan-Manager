@@ -1,6 +1,7 @@
 package com.rath0darya.loanmanager
 
 import android.Manifest
+import android.app.DatePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
 import android.net.Uri
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Settings
@@ -112,6 +114,7 @@ private fun LoanManagerApp() {
     val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf(AppPage.Home) }
     var showAddLoan by remember { mutableStateOf(false) }
+    var editLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
     var search by remember { mutableStateOf("") }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
@@ -134,7 +137,7 @@ private fun LoanManagerApp() {
                 val root = JSONObject()
                 val loanArray = JSONArray()
                 dao.allLoans().forEach { loan ->
-                    loanArray.put(JSONObject().put("id", loan.id).put("personName", loan.personName)
+                    loanArray.put(JSONObject().put("id", loan.id).put("personName", loan.personName).put("personName2", loan.personName2)
                         .put("direction", loan.direction).put("principal", loan.principal)
                         .put("monthlyRate", loan.monthlyRate).put("startDate", loan.startDate)
                         .put("dueDate", loan.dueDate ?: JSONObject.NULL).put("note", loan.note))
@@ -144,7 +147,7 @@ private fun LoanManagerApp() {
                     paymentArray.put(JSONObject().put("id", payment.id).put("loanId", payment.loanId)
                         .put("amount", payment.amount).put("paidAt", payment.paidAt).put("note", payment.note))
                 }
-                root.put("formatVersion", 1).put("exportedAt", System.currentTimeMillis())
+                root.put("formatVersion", 2).put("exportedAt", System.currentTimeMillis())
                     .put("loans", loanArray).put("payments", paymentArray)
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(root.toString(2)) }
                 snackbarHostState.showSnackbar("Backup saved")
@@ -173,6 +176,7 @@ private fun LoanManagerApp() {
                         val due = o.opt("dueDate")
                         val newId = dao.addLoan(LoanEntity(
                             personName = o.getString("personName"),
+                            personName2 = o.optString("personName2", ""),
                             direction = o.getString("direction"),
                             principal = o.getDouble("principal"),
                             monthlyRate = o.getDouble("monthlyRate"),
@@ -261,6 +265,7 @@ private fun LoanManagerApp() {
                 AppPage.Loans -> LoansScreen(
                     Modifier.padding(padding), loans, ::balance, paymentTotals, search, { search = it },
                     onAddPayment = { paymentFor = it },
+                    onEdit = { editLoan = it },
                     onDelete = { loan -> scope.launch {
                         dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
                         snackbarHostState.showSnackbar("Loan deleted")
@@ -279,29 +284,45 @@ private fun LoanManagerApp() {
         }
     }
 
-    if (showAddLoan) {
-        LoanDialog(onDismiss = { showAddLoan = false }, onSave = { person, direction, principal, rate, dueDays, note ->
-            scope.launch {
-                val now = System.currentTimeMillis()
-                val due = if (dueDays > 0) now + dueDays * 86_400_000L else null
-                val newId = dao.addLoan(LoanEntity(
-                    personName = person.trim(), direction = direction, principal = principal,
-                    monthlyRate = rate, startDate = now, dueDate = due, note = note.trim()
-                ))
-                if (due != null) {
-                    val delay = (due - System.currentTimeMillis()).coerceAtLeast(0L)
-                    val request = OneTimeWorkRequestBuilder<LoanReminderWorker>()
-                        .setInitialDelay(delay, TimeUnit.MILLISECONDS)
-                        .setInputData(workDataOf("loanId" to newId, "personName" to person.trim()))
-                        .build()
-                    WorkManager.getInstance(context).enqueueUniqueWork(
-                        "loan_due_$newId", ExistingWorkPolicy.REPLACE, request
+    if (showAddLoan || editLoan != null) {
+        val editing = editLoan
+        LoanDialog(
+            existing = editing,
+            onDismiss = { showAddLoan = false; editLoan = null },
+            onSave = { person1, person2, direction, principal, rate, startDate, dueDays, note ->
+                scope.launch {
+                    val due = if (dueDays > 0) System.currentTimeMillis() + dueDays * 86_400_000L else null
+                    val savedLoan = LoanEntity(
+                        id = editing?.id ?: 0L,
+                        personName = person1.trim(),
+                        personName2 = person2.trim(),
+                        direction = direction,
+                        principal = principal,
+                        monthlyRate = rate,
+                        startDate = startDate,
+                        dueDate = due,
+                        note = note.trim()
                     )
+                    val savedId = if (editing == null) dao.addLoan(savedLoan) else {
+                        dao.updateLoan(savedLoan)
+                        editing.id
+                    }
+                    if (due != null) {
+                        val delay = (due - System.currentTimeMillis()).coerceAtLeast(0L)
+                        val request = OneTimeWorkRequestBuilder<LoanReminderWorker>()
+                            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+                            .setInputData(workDataOf("loanId" to savedId, "personName" to listOf(person1.trim(), person2.trim()).filter { it.isNotBlank() }.joinToString(" & ")))
+                            .build()
+                        WorkManager.getInstance(context).enqueueUniqueWork("loan_due_$savedId", ExistingWorkPolicy.REPLACE, request)
+                    } else {
+                        WorkManager.getInstance(context).cancelUniqueWork("loan_due_$savedId")
+                    }
+                    showAddLoan = false
+                    editLoan = null
+                    snackbarHostState.showSnackbar(if (editing == null) "Loan saved" else "Loan updated")
                 }
-                showAddLoan = false
-                snackbarHostState.showSnackbar("Loan saved")
             }
-        })
+        )
     }
     paymentFor?.let { loan ->
         PaymentDialog(onDismiss = { paymentFor = null }, onSave = { amount, note ->
@@ -345,12 +366,12 @@ private fun DashboardScreen(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("Monthly interest", money(monthlyInterest), Modifier.weight(1f))
-                StatCard("People", loans.map { it.personName.trim().lowercase() }.distinct().size.toString(), Modifier.weight(1f))
+                StatCard("People", loans.flatMap { listOf(it.personName, it.personName2) }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size.toString(), Modifier.weight(1f))
             }
         }
         item { Text("Recent loans", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         if (loans.isEmpty()) item { EmptyState("No loans yet", "Tap Loans, then + to add your first record.") }
-        items(loans.take(5), key = { it.id }) { loan -> LoanCard(loan, balance(loan), 0.0, {}, null) }
+        items(loans.take(5), key = { it.id }) { loan -> LoanCard(loan, balance(loan), 0.0, {}, null, null) }
         item { Button(onClick = onViewLoans, modifier = Modifier.fillMaxWidth()) { Text("View all loans") } }
         item { Text("Interest uses simple monthly interest on the original principal for each completed month.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -360,11 +381,11 @@ private fun DashboardScreen(
 @Composable
 private fun LoansScreen(
     modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double,
-    paymentTotals: Map<Long, Double>, search: String, onSearch: (String) -> Unit, onAddPayment: (LoanEntity) -> Unit,
+    paymentTotals: Map<Long, Double>, search: String, onSearch: (String) -> Unit, onAddPayment: (LoanEntity) -> Unit, onEdit: (LoanEntity) -> Unit,
     onDelete: (LoanEntity) -> Unit
 ) {
     val filtered = loans.filter {
-        it.personName.contains(search, ignoreCase = true) ||
+        (it.personName.contains(search, ignoreCase = true) || it.personName2.contains(search, ignoreCase = true)) ||
             it.direction.contains(search, ignoreCase = true) || it.note.contains(search, ignoreCase = true)
     }
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -376,7 +397,7 @@ private fun LoansScreen(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
             if (filtered.isEmpty()) item { EmptyState("Nothing found", "Add a loan or try another search.") }
             items(filtered, key = { it.id }) { loan ->
-                LoanCard(loan, balance(loan), paymentTotals[loan.id] ?: 0.0, { onAddPayment(loan) }, { onDelete(loan) })
+                LoanCard(loan, balance(loan), paymentTotals[loan.id] ?: 0.0, { onAddPayment(loan) }, { onEdit(loan) }, { onDelete(loan) })
             }
             item { Spacer(Modifier.height(72.dp)) }
         }
@@ -385,13 +406,13 @@ private fun LoansScreen(
 
 @Composable
 private fun LoanCard(
-    loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onDelete: (() -> Unit)?
+    loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(loan.personName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(listOf(loan.personName, loan.personName2).filter { it.isNotBlank() }.joinToString(" & "), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(if (loan.direction == "LENT") "You lent" else "You borrowed",
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
@@ -411,6 +432,7 @@ private fun LoanCard(
                     Button(onClick = onAddPayment) {
                         Icon(Icons.Filled.Payments, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Record payment")
                     }
+                    if (onEdit != null) IconButton(onClick = onEdit) { Icon(Icons.Filled.Edit, contentDescription = "Edit loan") }
                     IconButton(onClick = onDelete) {
                         Icon(Icons.Filled.Delete, contentDescription = "Delete loan")
                     }
@@ -422,12 +444,12 @@ private fun LoanCard(
 
 @Composable
 private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double) {
-    val people = loans.groupBy { it.personName.trim() }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+    val people = loans.flatMap { loan -> listOf(loan.personName, loan.personName2).filter { it.isNotBlank() }.map { it.trim() to loan } }.groupBy({ it.first }, { it.second }).toSortedMap(String.CASE_INSENSITIVE_ORDER)
     LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("People are created automatically when you add a loan.", style = MaterialTheme.typography.bodyMedium) }
         if (people.isEmpty()) item { EmptyState("No people yet", "Your borrower and lender list will appear here.") }
         items(people.keys.toList(), key = { it }) { name ->
-            val records = people[name].orEmpty()
+            val records = people[name].orEmpty().distinctBy { it.id }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -450,7 +472,7 @@ private fun StatisticsScreen(
     val borrowed = loans.filter { it.direction == "BORROWED" }
     val paymentSum = payments.sumOf { it.amount }
     val monthlyInterest = loans.sumOf { it.principal * it.monthlyRate / 100.0 }
-    val maxPerson = loans.groupBy { it.personName }.maxByOrNull { entry -> entry.value.sumOf(balance) }
+    val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2).filter { it.isNotBlank() }.map { it to loan } }.groupBy({ it.first }, { it.second }).maxByOrNull { entry -> entry.value.distinctBy { it.id }.sumOf(balance) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Portfolio overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -501,40 +523,71 @@ private fun BackupScreen(modifier: Modifier, onExport: () -> Unit, onImport: () 
 
 @Composable
 private fun LoanDialog(
+    existing: LoanEntity? = null,
     onDismiss: () -> Unit,
-    onSave: (String, String, Double, Double, Int, String) -> Unit
+    onSave: (String, String, String, Double, Double, Long, Int, String) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var direction by remember { mutableStateOf("LENT") }
-    var principal by remember { mutableStateOf("") }
-    var rate by remember { mutableStateOf("") }
-    var dueDays by remember { mutableStateOf("30") }
-    var note by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    var name1 by remember(existing?.id) { mutableStateOf(existing?.personName ?: "") }
+    var name2 by remember(existing?.id) { mutableStateOf(existing?.personName2 ?: "") }
+    var direction by remember(existing?.id) { mutableStateOf(existing?.direction ?: "LENT") }
+    var principal by remember(existing?.id) { mutableStateOf(existing?.principal?.toString() ?: "") }
+    var rate by remember(existing?.id) { mutableStateOf(existing?.monthlyRate?.toString() ?: "") }
+    var startDateText by remember(existing?.id) {
+        mutableStateOf(existing?.startDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate().toString() } ?: LocalDate.now().toString())
+    }
+    var dueDays by remember(existing?.id) {
+        mutableStateOf(existing?.dueDate?.let { ((it - System.currentTimeMillis()) / 86_400_000L).coerceAtLeast(0).toString() } ?: "30")
+    }
+    var note by remember(existing?.id) { mutableStateOf(existing?.note ?: "") }
     val amount = principal.toDoubleOrNull()
     val interest = rate.toDoubleOrNull()
+    val parsedDate = runCatching { LocalDate.parse(startDateText) }.getOrNull()
+    val startMillis = parsedDate?.let { it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add loan") },
+        title = { Text(if (existing == null) "Add loan" else "Edit loan") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Borrower / lender name") }, singleLine = true)
+                OutlinedTextField(name1, { name1 = it }, label = { Text(if (direction == "LENT") "Borrower 1 name" else "Lender 1 name") }, singleLine = true)
+                OutlinedTextField(name2, { name2 = it }, label = { Text(if (direction == "LENT") "Borrower 2 name (optional)" else "Lender 2 name (optional)") }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.FilterChip(selected = direction == "LENT", onClick = { direction = "LENT" }, label = { Text("I lent") })
                     androidx.compose.material3.FilterChip(selected = direction == "BORROWED", onClick = { direction = "BORROWED" }, label = { Text("I borrowed") })
                 }
                 OutlinedTextField(principal, { principal = it }, label = { Text("Principal amount (₹)") }, singleLine = true)
                 OutlinedTextField(rate, { rate = it }, label = { Text("Fixed interest (% per month)") }, singleLine = true)
+                OutlinedTextField(
+                    value = startDateText,
+                    onValueChange = { startDateText = it },
+                    label = { Text("Loan taken date (yyyy-MM-dd)") },
+                    supportingText = { Text("Tap Choose to select a past or current date.") },
+                    trailingIcon = {
+                        TextButton(onClick = {
+                            val date = parsedDate ?: LocalDate.now()
+                            DatePickerDialog(
+                                context,
+                                { _, year, month, day -> startDateText = LocalDate.of(year, month + 1, day).toString() },
+                                date.year, date.monthValue - 1, date.dayOfMonth
+                            ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                        }) { Text("Choose") }
+                    },
+                    isError = parsedDate == null,
+                    singleLine = true
+                )
                 OutlinedTextField(dueDays, { dueDays = it.filter(Char::isDigit).take(4) },
-                    label = { Text("Reminder due in days (0 = none)") }, singleLine = true)
+                    label = { Text("Reminder due in days from today (0 = none)") }, singleLine = true)
                 OutlinedTextField(note, { note = it }, label = { Text("Note (optional)") })
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0) {
-                    onSave(name, direction, amount, interest, dueDays.toIntOrNull() ?: 0, note)
+                if (name1.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
+                    onSave(name1, name2, direction, amount, interest, startMillis, dueDays.toIntOrNull() ?: 0, note)
                 }
-            }, enabled = name.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0) { Text("Save loan") }
+            }, enabled = name1.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
+                Text(if (existing == null) "Save loan" else "Save changes")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
