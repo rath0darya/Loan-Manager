@@ -182,21 +182,22 @@ private fun LoanManagerApp() {
     // Recover the shared Android/media copy on a fresh installation before replacing it.
     LaunchedEffect(Unit) {
         try {
-            withContext(Dispatchers.IO) {
+            backupStatus = withContext(Dispatchers.IO) {
                 val existingLoans = dao.allLoans()
                 val existingPayments = dao.allPayments()
-                if (existingLoans.isEmpty() && existingPayments.isEmpty()) {
+                val status = if (existingLoans.isEmpty() && existingPayments.isEmpty()) {
                     val saved = DurableBackup.readAutomatic(context)
                     if (saved != null) {
                         restoreBackupJson(db, dao, saved)
-                        backupStatus = "Recovered ${dao.allLoans().size} loans and ${dao.allPayments().size} repayments from the Android folder."
+                        "Recovered ${dao.allLoans().size} loans and ${dao.allPayments().size} repayments from the Android folder."
                     } else {
-                        backupStatus = "No existing Android folder backup was found yet."
+                        "No existing Android folder backup was found yet."
                     }
                 } else {
-                    backupStatus = "Found ${existingLoans.size} local loans and ${existingPayments.size} repayments."
+                    "Found ${existingLoans.size} local loans and ${existingPayments.size} repayments."
                 }
                 DurableBackup.writeAutomatic(context, createBackupJson(dao))
+                status
             }
         } catch (e: Exception) {
             backupStatus = "Device backup needs attention: ${e.localizedMessage ?: "storage unavailable"}"
