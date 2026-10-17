@@ -40,7 +40,7 @@ For principal P, monthly rate R%, and elapsed time:
 - **Partial monthly period:** interest = monthly interest × elapsed days ÷ actual calendar days in that particular monthly anniversary period.
 - **Total accrued interest:** full-period interest + prorated interest for the current partial period.
 
-The monthly periods follow the loan's calendar-date anniversaries. Partial periods therefore use the actual length of that period, which may be 28, 29, 30, or 31 days. The app uses calendar dates in the device's local time zone; displayed currency is rounded for presentation.
+The monthly periods follow the loan's calendar-date anniversaries. Partial periods therefore use the actual length of that period, which may be 28, 29, 30, or 31 days. The app uses calendar dates in the device's local time zone and decimal arithmetic for the interest calculation. Accrued interest is rounded to the nearest paise (two decimal places, half-up).
 
 **Example:** ₹10,000 at 2% per month earns ₹200 for one complete monthly period. If the current monthly period is 30 days long and 10 days have elapsed in it, that partial-period interest is ₹200 × 10 ÷ 30 = ₹66.67.
 
