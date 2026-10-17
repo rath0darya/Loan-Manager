@@ -523,30 +523,62 @@ private fun StatisticsScreen(
     val paymentSum = payments.sumOf { it.amount }
     val monthlyInterest = loans.sumOf { it.principal * it.monthlyRate / 100.0 }
     val peopleCount = loans.flatMap { listOf(it.personName, it.personName2) }
-        .filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size
+        .filter { it.isNotBlank() }.map { it.trim().lowercase(Locale.ROOT) }.distinct().size
     val maxPerson = loans.flatMap { loan -> listOf(loan.personName, loan.personName2)
-        .filter { it.isNotBlank() }.map { it to loan } }
-        .groupBy({ it.first }, { it.second })
+        .filter { it.isNotBlank() }.map { it.trim() to loan } }
+        .groupBy({ it.first.lowercase(Locale.ROOT) }, { it.second })
         .maxByOrNull { entry -> entry.value.distinctBy { it.id }.sumOf(balance) }
-    val monthlyPayments = (5 downTo 0).map { offset ->
-        val month = java.time.YearMonth.now().minusMonths(offset.toLong())
-        val total = payments.filter {
-            java.time.Instant.ofEpochMilli(it.paidAt).atZone(java.time.ZoneId.systemDefault())
-                .let { date -> date.year == month.year && date.monthValue == month.monthValue }
+    val recentMonths = (5 downTo 0).map { java.time.YearMonth.now().minusMonths(it.toLong()) }
+    fun endOfMonth(month: java.time.YearMonth) =
+        month.atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val paymentBars = recentMonths.map { month ->
+        month.month.name.take(3) to payments.filter {
+            Instant.ofEpochMilli(it.paidAt).atZone(ZoneId.systemDefault())
+                .let { d -> d.year == month.year && d.monthValue == month.monthValue }
         }.sumOf { it.amount }
-        month.month.name.take(3) to total
+    }
+    val balanceTrend = recentMonths.map { month ->
+        val cutoff = endOfMonth(month)
+        val value = loans.filter { it.startDate <= cutoff }.sumOf { loan ->
+            val interest = loan.principal * loan.monthlyRate / 100.0 * completedMonths(loan.startDate, cutoff)
+            val paid = payments.filter { it.loanId == loan.id && it.paidAt <= cutoff }.sumOf { it.amount }
+            (loan.principal + interest - paid).coerceAtLeast(0.0)
+        }
+        month.month.name.take(3) to value
+    }
+    val currentCount = loans.count { balance(it) > 0 && (it.dueDate == null || it.dueDate >= System.currentTimeMillis()) }
+    val overdueCount = loans.count { balance(it) > 0 && it.dueDate != null && it.dueDate < System.currentTimeMillis() }
+    val noDueDateCount = loans.count { balance(it) > 0 && it.dueDate == null }
+    val grouped = recentMonths.map { month ->
+        val inMonth = loans.filter { loan ->
+            Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault())
+                .let { it.year == month.year && it.monthValue == month.monthValue }
+        }
+        Triple(month.month.name.take(3), inMonth.filter { it.direction == "LENT" }.sumOf { it.principal },
+            inMonth.filter { it.direction == "BORROWED" }.sumOf { it.principal })
+    }
+    val originationsVsPayments = recentMonths.map { month ->
+        val originations = loans.filter { loan ->
+            Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault())
+                .let { it.year == month.year && it.monthValue == month.monthValue }
+        }.sumOf { it.principal }
+        val paid = payments.filter {
+            Instant.ofEpochMilli(it.paidAt).atZone(ZoneId.systemDefault())
+                .let { it.year == month.year && it.monthValue == month.monthValue }
+        }.sumOf { it.amount }
+        Triple(month.month.name.take(3), originations, paid)
     }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Financial insights", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("A visual snapshot of your lending portfolio", style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("A visual snapshot of your lending portfolio, calculated from offline loan and repayment records.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         StatCard("Total outstanding", money(outstanding), Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Money lent", money(lentBalance), Modifier.weight(1f))
             StatCard("Money borrowed", money(borrowedBalance), Modifier.weight(1f))
         }
-        GlassPanel(title = "Portfolio split", subtitle = "Outstanding balance by direction") {
+        GlassPanel(title = "Portfolio split · donut chart", subtitle = "Outstanding balance by direction") {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 PortfolioDonut(lentBalance, borrowedBalance, Modifier.size(132.dp))
@@ -556,13 +588,50 @@ private fun StatisticsScreen(
                 }
             }
         }
-        GlassPanel(title = "Lent vs borrowed", subtitle = "Compare outstanding totals at a glance") {
+        GlassPanel(title = "Stacked column chart · amortization estimate", subtitle = "Monthly payments over the last 6 months") {
+            PaymentBars(paymentBars)
+            Text("The app does not store each payment's principal/interest split, so a true amortization breakdown cannot yet be calculated reliably. This chart shows total payments only.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        GlassPanel(title = "Line chart · outstanding balance", subtitle = "Reconstructed month-end balance over the last 6 months") {
+            TrendLineChart(balanceTrend)
+            Text("Uses loan start dates, completed months of simple interest, and repayments recorded by each month end.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        GlassPanel(title = "Donut chart · portfolio health", subtitle = "Open loans grouped by due-date information") {
+            HealthDonut(currentCount, overdueCount, noDueDateCount, Modifier.size(136.dp))
+            LegendRow("Current / not yet due", Color(0xFF16866B), "$currentCount loans")
+            LegendRow("Overdue", Color(0xFFE59B42), "$overdueCount loans")
+            LegendRow("No due date set", Color(0xFF5B8DE5), "$noDueDateCount loans")
+            Text("Defaulted status is not tracked yet; overdue does not automatically mean defaulted.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        GlassPanel(title = "Grouped bar chart · loan direction", subtitle = "New principal recorded each month") {
+            GroupedDirectionChart(grouped)
+            LegendRow("You lent", Color(0xFF16866B), "Lent principal")
+            LegendRow("You borrowed", Color(0xFF5B8DE5), "Borrowed principal")
+        }
+        GlassPanel(title = "Waterfall-style cash-flow view", subtitle = "New principal versus repayments by month") {
+            CashFlowBridgeChart(originationsVsPayments)
+            Text("Repayments include both principal and interest. The app does not yet track principal allocation or write-offs, so this is a cash-flow comparison rather than a full portfolio waterfall.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        GlassPanel(title = "Lent vs borrowed", subtitle = "Compare current outstanding totals") {
             ComparisonBar("Lent", lentBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF16866B))
             ComparisonBar("Borrowed", borrowedBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF5B8DE5))
         }
         GlassPanel(title = "Repayment activity", subtitle = "Payments recorded in the last 6 months") {
-            PaymentBars(monthlyPayments)
+            PaymentBars(paymentBars)
         }
+        Text("Advanced analytics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        DataNeededPanel("Scatter plot · DTI vs approved amount",
+            "Needs monthly income, monthly debt obligations and approved loan amount; these fields are not currently collected.")
+        DataNeededPanel("Box plot · credit scores and risk-tier rates",
+            "Needs credit scores and risk tiers. The app currently stores neither, so this distribution cannot be calculated.")
+        DataNeededPanel("Funnel chart · application pipeline",
+            "Needs inquiry, application, approval, rejection and disbursement stages. Lendora currently records loans after creation.")
+        DataNeededPanel("Geographic heatmap · regional risk",
+            "Needs borrower location and regional delinquency data. Lendora does not collect location data.")
         Text("Key metrics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Original principal", money(principal), Modifier.weight(1f))
@@ -574,7 +643,7 @@ private fun StatisticsScreen(
         }
         StatCard("People tracked", peopleCount.toString(), Modifier.fillMaxWidth())
         StatCard("Highest outstanding person", maxPerson?.key ?: "—", Modifier.fillMaxWidth())
-        Text("Balances include simple interest for completed months and subtract recorded payments. Interest is calculated on original principal; confirm that this matches your agreement before relying on totals.",
+        Text("Balances use simple monthly interest on original principal for each completed month, less recorded payments. Confirm this matches each loan agreement before relying on totals.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -664,6 +733,121 @@ private fun PaymentBars(data: List<Pair<String, Double>>) {
                 Text(month, style = MaterialTheme.typography.labelSmall)
             }
         }
+    }
+}
+
+@Composable
+private fun DataNeededPanel(title: String, description: String) {
+    Card(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFDAE9E2), RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7FAF8))) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            }
+            Text("Needs more data", style = MaterialTheme.typography.labelMedium, color = Color(0xFF9A6B20))
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TrendLineChart(data: List<Pair<String, Double>>) {
+    val maxValue = data.maxOfOrNull { it.second } ?: 0.0
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+            if (data.isNotEmpty()) {
+                val pad = 12.dp.toPx()
+                val w = (size.width - 2 * pad).coerceAtLeast(1f)
+                val h = (size.height - 2 * pad).coerceAtLeast(1f)
+                val pts = data.mapIndexed { i, item ->
+                    val x = if (data.size == 1) size.width / 2f else pad + w * i / (data.size - 1)
+                    val y = size.height - pad - if (maxValue <= 0.0) h else h * (item.second / maxValue).toFloat()
+                    androidx.compose.ui.geometry.Offset(x, y)
+                }
+                for (step in 0..3) {
+                    val y = pad + h * step / 3f
+                    drawLine(Color(0xFFE3ECE7), androidx.compose.ui.geometry.Offset(pad, y),
+                        androidx.compose.ui.geometry.Offset(size.width - pad, y), strokeWidth = 1.dp.toPx())
+                }
+                pts.zipWithNext().forEach { (a, b) -> drawLine(Color(0xFF16866B), a, b, 3.dp.toPx(), cap = StrokeCap.Round) }
+                pts.forEach { drawCircle(Color(0xFF16866B), 4.dp.toPx(), it) }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            data.forEach { (label, _) -> Text(label, style = MaterialTheme.typography.labelSmall) }
+        }
+        Text("Latest: " + (data.lastOrNull()?.second?.let { money(it) } ?: money(0.0)),
+            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun HealthDonut(current: Int, overdue: Int, noDueDate: Int, modifier: Modifier = Modifier) {
+    val total = current + overdue + noDueDate
+    Canvas(modifier) {
+        val stroke = 24.dp.toPx()
+        val diameter = size.minDimension - stroke
+        val topLeft = androidx.compose.ui.geometry.Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
+        val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
+        drawArc(Color(0xFFE4ECE8), -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+        if (total > 0) {
+            val a = current.toFloat() / total * 360f
+            val b = overdue.toFloat() / total * 360f
+            val c = noDueDate.toFloat() / total * 360f
+            drawArc(Color(0xFF16866B), -90f, a, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+            drawArc(Color(0xFFE59B42), -90f + a, b, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+            drawArc(Color(0xFF5B8DE5), -90f + a + b, c, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+        }
+    }
+}
+
+@Composable
+private fun GroupedDirectionChart(data: List<Triple<String, Double, Double>>) {
+    val maxValue = data.maxOfOrNull { maxOf(it.second, it.third) } ?: 0.0
+    Row(Modifier.fillMaxWidth().height(150.dp), horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.Bottom) {
+        data.forEach { (label, lent, borrowed) ->
+            Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
+                    val h1 = if (maxValue <= 0.0) 2.dp else (86f * (lent / maxValue)).dp
+                    val h2 = if (maxValue <= 0.0) 2.dp else (86f * (borrowed / maxValue)).dp
+                    androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h1).background(Color(0xFF16866B), RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
+                    Spacer(Modifier.width(3.dp))
+                    androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h2).background(Color(0xFF5B8DE5), RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(label, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CashFlowBridgeChart(data: List<Triple<String, Double, Double>>) {
+    val maxValue = data.maxOfOrNull { maxOf(it.second, it.third) } ?: 0.0
+    Row(Modifier.fillMaxWidth().height(164.dp), horizontalArrangement = Arrangement.spacedBy(7.dp),
+        verticalAlignment = Alignment.Bottom) {
+        data.forEach { (label, originations, repayments) ->
+            Column(Modifier.weight(1f).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom) {
+                Text(shortMoney(originations), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                val h1 = if (maxValue <= 0.0) 2.dp else (78f * (originations / maxValue)).dp
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.62f).height(h1)
+                    .background(Color(0xFF16866B), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                Spacer(Modifier.height(4.dp))
+                val h2 = if (maxValue <= 0.0) 2.dp else (78f * (repayments / maxValue)).dp
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.62f).height(h2)
+                    .background(Color(0xFFE59B42), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                Spacer(Modifier.height(4.dp))
+                Text(label, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LegendRow("Originations", Color(0xFF16866B), "New principal")
+        LegendRow("Repayments", Color(0xFFE59B42), "Recorded payments")
     }
 }
 
