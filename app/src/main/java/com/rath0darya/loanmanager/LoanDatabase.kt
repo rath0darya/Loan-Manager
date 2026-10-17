@@ -62,6 +62,12 @@ interface LoanDao {
     suspend fun addPayment(payment: PaymentEntity)
 
     @Update
+    suspend fun updatePayment(payment: PaymentEntity)
+
+    @Query("DELETE FROM payments WHERE id = :paymentId")
+    suspend fun deletePayment(paymentId: Long)
+
+    @Update
     suspend fun updateLoan(loan: LoanEntity)
 
     @Query("DELETE FROM payments")
