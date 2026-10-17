@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -164,6 +165,7 @@ private fun LoanManagerApp() {
     var pinConfigured by remember { mutableStateOf(preferences.contains("pin_hash")) }
     var appLocked by remember { mutableStateOf(preferences.contains("pin_hash")) }
     var fingerprintEnabled by remember { mutableStateOf(preferences.getBoolean("fingerprint_enabled", true)) }
+    var fingerprintFailures by remember { mutableStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, pinConfigured) {
         val observer = LifecycleEventObserver { _, event ->
@@ -557,16 +559,25 @@ private fun LoanManagerApp() {
     if (pinConfigured && appLocked) {
         PinUnlockDialog(
             fingerprintEnabled = fingerprintEnabled,
+            fingerprintFailures = fingerprintFailures,
             onUnlock = { pin ->
                 val salt = preferences.getString("pin_salt", "") ?: ""
                 val savedHash = preferences.getString("pin_hash", "") ?: ""
-                if (hashAppPin(pin, salt) == savedHash) { appLocked = false; true } else false
+                if (hashAppPin(pin, salt) == savedHash) {
+                    appLocked = false
+                    fingerprintFailures = 0
+                    true
+                } else false
             },
+            onFingerprintFailureCount = { fingerprintFailures = it },
             onFingerprint = {
                 val activity = context as? androidx.fragment.app.FragmentActivity
-                if (activity != null) requestFingerprintUnlock(activity, { appLocked = false }, { message ->
-                    scope.launch { snackbarHostState.showSnackbar(message) }
-                })
+                if (activity != null) requestFingerprintUnlock(
+                    activity,
+                    { appLocked = false; fingerprintFailures = 0 },
+                    { count -> fingerprintFailures = maxOf(fingerprintFailures, count) },
+                    { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+                )
             }
         )
     }
@@ -1666,9 +1677,8 @@ private fun formatDate(time: Long): String =
 
 /**
  * Simple interest using calendar-month anniversaries for completed periods.
- * Each completed month earns one full monthly interest amount. Remaining days
- * accrue at monthlyInterest * 12 / 365 or 366, according to each day's calendar year.
- * Example: 27 Jun 2026 to 27 Jun 2027 earns 12 full monthly charges.
+ * Each completed month earns one full monthly interest amount. Partial-month
+ * days earn monthly interest divided by 30, regardless of leap years.
  */
 private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis: Long, endMillis: Long): Double {
     if (principal <= 0.0 || monthlyRate <= 0.0 || endMillis <= startMillis) return 0.0
@@ -1688,12 +1698,10 @@ private fun accruedInterest(principal: Double, monthlyRate: Double, startMillis:
     while (!start.plusMonths(completedPeriods + 1).isAfter(end)) completedPeriods++
     var interest = monthlyInterest.multiply(BigDecimal.valueOf(completedPeriods))
 
-    // Only the remaining incomplete monthly period uses the annual daily rate.
+    // Partial-month daily interest is always 1/30 of the monthly interest.
     var day = start.plusMonths(completedPeriods)
+    val dailyInterest = monthlyInterest.divide(BigDecimal.valueOf(30L), scale, rounding)
     while (day.isBefore(end)) {
-        val daysInYear = if (day.isLeapYear) 366L else 365L
-        val dailyInterest = monthlyInterest.multiply(BigDecimal.valueOf(12L))
-            .divide(BigDecimal.valueOf(daysInYear), scale, rounding)
         interest = interest.add(dailyInterest)
         day = day.plusDays(1)
     }
