@@ -185,6 +185,8 @@ private fun LoanManagerApp() {
     var deleteConfirmPayment by remember { mutableStateOf<PaymentEntity?>(null) }
     var detailLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var deleteConfirmLoan by remember { mutableStateOf<LoanEntity?>(null) }
+    var confirmLoanDeleteFinal by remember { mutableStateOf(false) }
+    var confirmPaymentDeleteFinal by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     var backupStatus by remember { mutableStateOf("Device backup will be checked automatically.") }
@@ -347,7 +349,7 @@ private fun LoanManagerApp() {
                 AppPage.Loans -> LoansScreen(
                     Modifier.padding(padding), loans, ::balance, paymentTotals, search, { search = it },
                     onAddPayment = { paymentFor = it }, onViewDetails = { detailLoan = it },
-                    onEdit = { editLoan = it }, onDelete = { deleteConfirmLoan = it }
+                    onEdit = { editLoan = it }, onDelete = { deleteConfirmLoan = it; confirmLoanDeleteFinal = false }
                 )
                 AppPage.People -> PeopleScreen(Modifier.padding(padding), loans, ::balance)
                 AppPage.Statistics -> StatisticsScreen(
@@ -491,39 +493,43 @@ private fun LoanManagerApp() {
             loan, payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }, balance(loan),
             onDismiss = { detailLoan = null },
             onEditPayment = { editingPayment = it },
-            onDeletePayment = { deleteConfirmPayment = it }
+            onDeletePayment = { deleteConfirmPayment = it; confirmPaymentDeleteFinal = false }
         )
     }
     deleteConfirmPayment?.let { payment ->
         AlertDialog(
             onDismissRequest = { deleteConfirmPayment = null },
-            title = { Text("Delete this payment?") },
-            text = { Text("Delete the payment of ${money(payment.amount)} recorded on ${formatDate(payment.paidAt)}? The amount still due will be recalculated.") },
+            title = { Text(if (confirmPaymentDeleteFinal) "Final check: delete payment?" else "Delete this payment?") },
+            text = { Text(if (confirmPaymentDeleteFinal) "This is the last confirmation. Delete ${money(payment.amount)} permanently? The outstanding balance will be recalculated." else "Are you sure you want to delete the payment of ${money(payment.amount)} recorded on ${formatDate(payment.paidAt)}?") },
             confirmButton = { TextButton(onClick = {
-                scope.launch {
+                if (!confirmPaymentDeleteFinal) confirmPaymentDeleteFinal = true
+                else scope.launch {
                     dao.deletePayment(payment.id)
                     withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
                     deleteConfirmPayment = null
+                    confirmPaymentDeleteFinal = false
                     snackbarHostState.showSnackbar("Payment deleted and balance updated")
                 }
-            }) { Text("Yes, delete payment") } },
-            dismissButton = { TextButton(onClick = { deleteConfirmPayment = null }) { Text("Cancel") } }
+            }) { Text(if (confirmPaymentDeleteFinal) "Delete permanently" else "Continue") } },
+            dismissButton = { TextButton(onClick = { deleteConfirmPayment = null; confirmPaymentDeleteFinal = false }) { Text("Cancel") } }
         )
     }
     deleteConfirmLoan?.let { loan ->
         AlertDialog(
             onDismissRequest = { deleteConfirmLoan = null },
-            title = { Text("Delete this loan?") },
-            text = { Text("This will permanently delete this loan and all its payment records for " + listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ") + ". This cannot be undone. Are you sure?") },
+            title = { Text(if (confirmLoanDeleteFinal) "Final check: delete loan?" else "Delete this loan?") },
+            text = { Text(if (confirmLoanDeleteFinal) "Final confirmation: permanently delete this loan and all its payment records? This cannot be undone." else "Are you sure you want to delete the loan for " + listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ") + "? You will be asked one more time before it is deleted.") },
             confirmButton = { TextButton(onClick = {
-                scope.launch {
+                if (!confirmLoanDeleteFinal) confirmLoanDeleteFinal = true
+                else scope.launch {
                     dao.deletePaymentsForLoan(loan.id); dao.deleteLoan(loan.id)
                     withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
                     deleteConfirmLoan = null
+                    confirmLoanDeleteFinal = false
                     snackbarHostState.showSnackbar("Loan and its payment records deleted")
                 }
-            }) { Text("Yes, delete") } },
-            dismissButton = { TextButton(onClick = { deleteConfirmLoan = null }) { Text("Cancel") } }
+            }) { Text(if (confirmLoanDeleteFinal) "Delete permanently" else "Continue") } },
+            dismissButton = { TextButton(onClick = { deleteConfirmLoan = null; confirmLoanDeleteFinal = false }) { Text("Cancel") } }
         )
     }
     if (pinConfigured && appLocked) {
