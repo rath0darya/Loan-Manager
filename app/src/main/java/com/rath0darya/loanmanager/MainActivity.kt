@@ -599,8 +599,6 @@ private fun LoanManagerApp() {
     }
 }
 
-@Composable
-
 private data class LoanReportLine(val label: String, val value: String, val section: Boolean = false)
 
 private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double): List<LoanReportLine> {
@@ -677,7 +675,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
         paint.textSize = 28f
         canvas.drawText("FULL LOAN REPORT", 190f, 145f, paint)
         paint.textSize = 23f
-        paint.typeface = android.graphics.Typeface.NORMAL
+        paint.typeface = android.graphics.Typeface.DEFAULT
         canvas.drawText("Personal lending, clearly organised", 64f, 205f, paint)
         var y = headerHeight + 24f
         rows.forEachIndexed { index, row ->
@@ -790,6 +788,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
     }
 }
 
+@Composable
 private fun LoanDetailsDialog(
     loan: LoanEntity,
     payments: List<PaymentEntity>,
@@ -857,7 +856,7 @@ private fun LoanDetailsDialog(
                     Button(onClick = { shareLoanReport(context = context, loan = loan, payments = payments, outstanding = outstanding, asPdf = true) }, modifier = Modifier.weight(1f)) {
                         Text("Share PDF")
                     }
-                    Button(onClick = { shareLoanReport(context = androidx.compose.ui.platform.LocalContext.current, loan = loan, payments = payments, outstanding = outstanding, asPdf = false) }, modifier = Modifier.weight(1f)) {
+                    Button(onClick = { shareLoanReport(context = context, loan = loan, payments = payments, outstanding = outstanding, asPdf = false) }, modifier = Modifier.weight(1f)) {
                         Text("Share image")
                     }
                 }
