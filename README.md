@@ -6,7 +6,7 @@
 
 An elegant, offline-first Android loan ledger for money lent, money borrowed, and every repayment in between.
 
-[**Open the styled FundNiti experience ↗**](docs/index.html)
+[**Browse the responsive HTML/CSS landing page ↗**](docs/index.html)
 
 [**Download APK**](Download/LoanManager.apk) · [**View build status**](https://github.com/rath0darya/Loan-Manager/actions) · [**Browse source**](https://github.com/rath0darya/Loan-Manager)
 
