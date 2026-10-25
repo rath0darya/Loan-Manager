@@ -1091,8 +1091,8 @@ private fun InterestCalculatorCard() {
                 HorizontalResultLine("Principal + interest", money(principal!! + interest))
                 HorizontalResultLine("Duration", "${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days")
                 androidx.compose.material3.                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { shareCalculatorResult(context, "Interest Calculator", "INTEREST CALCULATION RESULT\\nPrincipal: ${money(principal!!)}\\nMonthly interest rate: ${rateText}%\\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\\nInterest amount: ${money(interest)}\\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share image") }
-                    Button(onClick = { shareCalculatorResultPdf(context, "Interest Calculator", "INTEREST CALCULATION RESULT\\nPrincipal: ${money(principal!!)}\\nMonthly interest rate: ${rateText}%\\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\\nInterest amount: ${money(interest)}\\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
+                    Button(onClick = { shareCalculatorResult(context, "Interest Calculator", "INTEREST CALCULATION RESULT\nPrincipal: ${money(principal!!)}\nMonthly interest rate: ${rateText}%\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\nInterest amount: ${money(interest)}\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share image") }
+                    Button(onClick = { shareCalculatorResultPdf(context, "Interest Calculator", "INTEREST CALCULATION RESULT\nPrincipal: ${money(principal!!)}\nMonthly interest rate: ${rateText}%\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\nInterest amount: ${money(interest)}\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
                 }
             } else {
                 Text("Enter a positive principal, a non-negative rate, and a valid duration.",
@@ -1178,8 +1178,8 @@ private fun TenureCalculatorCard() {
                     }
                 }
                 androidx.compose.material3.                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { shareCalculatorResult(context, "Tenure Calculator", "DATE DURATION RESULT\\nFrom: ${formatDate(fromDateMillis)}\\nTo: ${formatDate(toDateMillis)}\\nDuration: $totalMonths months, ${period.days} days\\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share image") }
-                    Button(onClick = { shareCalculatorResultPdf(context, "Tenure Calculator", "DATE DURATION RESULT\\nFrom: ${formatDate(fromDateMillis)}\\nTo: ${formatDate(toDateMillis)}\\nDuration: $totalMonths months, ${period.days} days\\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
+                    Button(onClick = { shareCalculatorResult(context, "Tenure Calculator", "DATE DURATION RESULT\nFrom: ${formatDate(fromDateMillis)}\nTo: ${formatDate(toDateMillis)}\nDuration: $totalMonths months, ${period.days} days\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share image") }
+                    Button(onClick = { shareCalculatorResultPdf(context, "Tenure Calculator", "DATE DURATION RESULT\nFrom: ${formatDate(fromDateMillis)}\nTo: ${formatDate(toDateMillis)}\nDuration: $totalMonths months, ${period.days} days\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
                 }
                 Text(
                     "Calendar months follow the selected dates, including different month lengths and leap years. This calculation does not change saved loan records.",
