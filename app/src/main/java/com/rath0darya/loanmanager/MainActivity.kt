@@ -644,7 +644,18 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
 }
 
 private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double, asPdf: Boolean) {
-    val rows = loanReportLines(loan, payments, outstanding)
+    val fullRows = loanReportLines(loan, payments, outstanding)
+    val summaryRows = loanReportLines(loan, emptyList(), outstanding).filterNot { it.label.startsWith("Payment history") }.toMutableList()
+    summaryRows.add(LoanReportLine("Recent payments (" + payments.size + " total)", "", true))
+    if (payments.isEmpty()) summaryRows.add(LoanReportLine("Payments", "No payments recorded"))
+    payments.takeLast(5).forEachIndexed { index, payment ->
+        summaryRows.add(LoanReportLine("Payment " + (payments.size - minOf(5, payments.size) + index + 1), money(payment.amount), true))
+        summaryRows.add(LoanReportLine("Date & time", formatDate(payment.paidAt) + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(payment.paidAt))))
+        summaryRows.add(LoanReportLine("Method", payment.paymentMethod))
+        if (payment.referenceNumber.isNotBlank()) summaryRows.add(LoanReportLine("Reference", payment.referenceNumber))
+        if (payment.note.isNotBlank()) summaryRows.add(LoanReportLine("Note", payment.note))
+    }
+    val rows = if (asPdf) fullRows else summaryRows
     val navy = android.graphics.Color.rgb(24, 43, 85)
     val teal = android.graphics.Color.rgb(0, 137, 123)
     val ink = android.graphics.Color.rgb(35, 45, 62)
