@@ -1090,7 +1090,7 @@ private fun InterestCalculatorCard() {
                 HorizontalResultLine("Interest amount", money(interest))
                 HorizontalResultLine("Principal + interest", money(principal!! + interest))
                 HorizontalResultLine("Duration", "${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days")
-                androidx.compose.material3.                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { shareCalculatorResult(context, "Interest Calculator", "INTEREST CALCULATION RESULT\nPrincipal: ${money(principal!!)}\nMonthly interest rate: ${rateText}%\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\nInterest amount: ${money(interest)}\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share image") }
                     Button(onClick = { shareCalculatorResultPdf(context, "Interest Calculator", "INTEREST CALCULATION RESULT\nPrincipal: ${money(principal!!)}\nMonthly interest rate: ${rateText}%\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\nInterest amount: ${money(interest)}\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
                 }
@@ -1177,7 +1177,7 @@ private fun TenureCalculatorCard() {
                         HorizontalResultLine("Total days", "$totalDays days")
                     }
                 }
-                androidx.compose.material3.                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { shareCalculatorResult(context, "Tenure Calculator", "DATE DURATION RESULT\nFrom: ${formatDate(fromDateMillis)}\nTo: ${formatDate(toDateMillis)}\nDuration: $totalMonths months, ${period.days} days\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share image") }
                     Button(onClick = { shareCalculatorResultPdf(context, "Tenure Calculator", "DATE DURATION RESULT\nFrom: ${formatDate(fromDateMillis)}\nTo: ${formatDate(toDateMillis)}\nDuration: $totalMonths months, ${period.days} days\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
                 }
