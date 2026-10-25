@@ -177,19 +177,6 @@ object DurableBackup {
     }
 
     fun writeAutomatic(context: Context, plainText: String): Uri {
-        val incomingCounts = countRecords(plainText)
-        val previousText = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            readShared(context)
-        } else {
-            val oldFile = automaticBackupFile(context)
-            if (oldFile.isFile && oldFile.length() > 0L) oldFile.readText(Charsets.UTF_8) else null
-        }
-        if (incomingCounts.first == 0 && incomingCounts.second == 0 && previousText != null) {
-            val previousCounts = runCatching { countRecords(previousText) }.getOrNull()
-            if (previousCounts != null && (previousCounts.first > 0 || previousCounts.second > 0)) {
-                throw IOException("Kept the existing backup with ${previousCounts.first} loans and ${previousCounts.second} repayments. The current app database is empty, so it was not allowed to overwrite your records.")
-            }
-        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = context.contentResolver
