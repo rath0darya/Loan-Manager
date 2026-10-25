@@ -600,6 +600,182 @@ private fun LoanManagerApp() {
 }
 
 @Composable
+
+private data class LoanReportLine(val label: String, val value: String, val section: Boolean = false)
+
+private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double): List<LoanReportLine> {
+    val now = System.currentTimeMillis()
+    val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, now)
+    val paid = payments.sumOf { it.amount }
+    val start = Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
+    val today = LocalDate.now()
+    val end = if (today.isBefore(start)) start else today
+    val period = Period.between(start, end)
+    val months = period.years * 12 + period.months
+    val rows = mutableListOf(
+        LoanReportLine("People", listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ").ifBlank { "Not specified" }, true),
+        LoanReportLine("Loan direction", when (loan.direction) { "LENT" -> "You gave money to someone"; "BORROWED_FOR_OTHER" -> "Borrowed from one person for another"; else -> "Borrowed for yourself" }),
+        LoanReportLine("Loan details", "", true),
+        LoanReportLine("Loan date", formatDate(loan.startDate)),
+        LoanReportLine("Duration", "\$months months, \${period.days} days (\${ChronoUnit.DAYS.between(start, end)} days total)"),
+        LoanReportLine("Principal amount", money(loan.principal)),
+        LoanReportLine("Interest rate", "\${loan.monthlyRate}% per month"),
+        LoanReportLine("Interest till now", money(interest)),
+        LoanReportLine("Payments made", money(paid)),
+        LoanReportLine("Amount still due", money(outstanding)),
+        LoanReportLine("Status", if (outstanding <= 0.009) "Fully paid" else "Still to be paid")
+    )
+    loan.dueDate?.let { rows.add(LoanReportLine("Reminder date", formatDate(it))) }
+    if (loan.note.isNotBlank()) rows.add(LoanReportLine("Loan notes", loan.note))
+    rows.add(LoanReportLine("Payment history (\${payments.size})", "", true))
+    if (payments.isEmpty()) rows.add(LoanReportLine("Payments", "No payments recorded"))
+    payments.forEachIndexed { index, payment ->
+        rows.add(LoanReportLine("Payment \${index + 1}: \${money(payment.amount)}", "", true))
+        rows.add(LoanReportLine("Date", formatDate(payment.paidAt)))
+        rows.add(LoanReportLine("Time", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(payment.paidAt))))
+        rows.add(LoanReportLine("Method", payment.paymentMethod))
+        if (payment.referenceNumber.isNotBlank()) rows.add(LoanReportLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction number", payment.referenceNumber))
+        if (payment.note.isNotBlank()) rows.add(LoanReportLine("Payment notes", payment.note))
+    }
+    return rows
+}
+
+private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double, asPdf: Boolean) {
+    val rows = loanReportLines(loan, payments, outstanding)
+    val navy = android.graphics.Color.rgb(24, 43, 85)
+    val teal = android.graphics.Color.rgb(0, 137, 123)
+    val ink = android.graphics.Color.rgb(35, 45, 62)
+    val muted = android.graphics.Color.rgb(95, 108, 126)
+    val pale = android.graphics.Color.rgb(240, 246, 252)
+    val width = 1080
+    val left = 64f
+    val right = width - 64f
+    val headerHeight = 250f
+    val heights = rows.map { if (it.section) 62f else 78f + (it.value.length / 48) * 32f }
+    val imageHeight = (headerHeight + heights.sum() + 150f).toInt().coerceAtMost(24000)
+    val bitmap = android.graphics.Bitmap.createBitmap(width, imageHeight, android.graphics.Bitmap.Config.ARGB_8888)
+    try {
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        canvas.drawColor(android.graphics.Color.WHITE)
+        paint.color = navy
+        canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, paint)
+        try {
+            val logo = context.packageManager.getApplicationIcon(context.packageName)
+            logo.setBounds(64, 48, 164, 148)
+            logo.draw(canvas)
+        } catch (_: Exception) {}
+        paint.color = android.graphics.Color.WHITE
+        paint.textSize = 48f
+        paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+        canvas.drawText("FundNiti", 190f, 102f, paint)
+        paint.textSize = 28f
+        canvas.drawText("FULL LOAN REPORT", 190f, 145f, paint)
+        paint.textSize = 23f
+        paint.typeface = android.graphics.Typeface.NORMAL
+        canvas.drawText("Personal lending, clearly organised", 64f, 205f, paint)
+        var y = headerHeight + 24f
+        rows.forEachIndexed { index, row ->
+            val h = heights[index]
+            if (row.section) {
+                paint.color = teal
+                canvas.drawRoundRect(left, y, right, y + h - 8f, 14f, 14f, paint)
+                paint.color = android.graphics.Color.WHITE
+                paint.textSize = 27f
+                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                canvas.drawText(row.label, left + 20f, y + 38f, paint)
+            } else {
+                paint.color = if (index % 2 == 0) pale else android.graphics.Color.WHITE
+                canvas.drawRoundRect(left, y, right, y + h - 6f, 12f, 12f, paint)
+                paint.color = muted
+                paint.textSize = 22f
+                paint.typeface = android.graphics.Typeface.NORMAL
+                canvas.drawText(row.label.take(58), left + 18f, y + 29f, paint)
+                paint.color = ink
+                paint.textSize = 27f
+                paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                row.value.chunked(54).take(4).forEachIndexed { line, value -> canvas.drawText(value, left + 18f, y + 59f + line * 44f, paint) }
+            }
+            y += h
+        }
+        val footer = (y + 15f).coerceAtMost(imageHeight - 120f)
+        paint.color = navy
+        canvas.drawRect(0f, footer, width.toFloat(), imageHeight.toFloat(), paint)
+        paint.color = android.graphics.Color.WHITE
+        paint.textSize = 23f
+        paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        canvas.drawText("FundNiti • Personal lending, clearly organised", left, footer + 42f, paint)
+        paint.textSize = 19f
+        paint.typeface = android.graphics.Typeface.NORMAL
+        canvas.drawText("For reference only • Verify details before sharing", left, footer + 78f, paint)
+
+        val dir = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
+        val file = java.io.File(dir, if (asPdf) "FundNiti-Loan-Report.pdf" else "FundNiti-Loan-Report.png")
+        if (asPdf) {
+            val doc = android.graphics.pdf.PdfDocument()
+            val pageW = 595
+            val pageH = 842
+            val scale = pageW.toFloat() / width
+            var rowIndex = 0
+            var pageNo = 1
+            do {
+                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW, pageH, pageNo).create())
+                val pc = page.canvas
+                pc.drawColor(android.graphics.Color.WHITE)
+                val hp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+                pc.drawRect(0f, 0f, pageW.toFloat(), headerHeight * scale, hp)
+                val title = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 25f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+                pc.drawText("FundNiti", 36f, 42f, title)
+                title.textSize = 14f
+                pc.drawText("FULL LOAN REPORT", 36f, 64f, title)
+                val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                var py = headerHeight * scale + 18f
+                val maxY = pageH - 45f
+                while (rowIndex < rows.size && py + heights[rowIndex] * scale < maxY) {
+                    val row = rows[rowIndex]
+                    val rh = heights[rowIndex] * scale
+                    if (row.section) {
+                        p.color = teal
+                        pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 6f, 6f, p)
+                        p.color = android.graphics.Color.WHITE; p.textSize = 12f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                        pc.drawText(row.label.take(65), 40f, py + rh / 2f + 4f, p)
+                    } else {
+                        p.color = if (rowIndex % 2 == 0) pale else android.graphics.Color.WHITE
+                        pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 5f, 5f, p)
+                        p.color = muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.NORMAL
+                        pc.drawText(row.label.take(34), 40f, py + 14f, p)
+                        p.color = ink; p.textSize = 11f; p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                        row.value.chunked(66).take(4).forEachIndexed { line, value -> pc.drawText(value, 40f, py + 29f + line * 11f, p) }
+                    }
+                    py += rh
+                    rowIndex++
+                }
+                val foot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy; textSize = 9f }
+                pc.drawText("FundNiti • For reference only • Page \$pageNo", 32f, pageH - 18f, foot)
+                doc.finishPage(page)
+                pageNo++
+            } while (rowIndex < rows.size)
+            java.io.FileOutputStream(file).use { doc.writeTo(it) }
+            doc.close()
+        } else {
+            java.io.FileOutputStream(file).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = if (asPdf) "application/pdf" else "image/png"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "FundNiti — Full Loan Report")
+            putExtra(android.content.Intent.EXTRA_TEXT, "FundNiti • Full Loan Report\nFor reference only. Verify details before sharing.")
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, if (asPdf) "Share loan report PDF" else "Share loan report image"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Could not create report: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show()
+    } finally {
+        bitmap.recycle()
+    }
+}
+
 private fun LoanDetailsDialog(
     loan: LoanEntity,
     payments: List<PaymentEntity>,
@@ -629,9 +805,9 @@ private fun LoanDetailsDialog(
                 DetailLine("Loan date", formatDate(loan.startDate))
                 DetailLine("Total Days", "$totalDays Days")
                 DetailLine("In Months", String.format(Locale.getDefault(), "%02d Months %02d Days", totalMonths, elapsedPeriod.days))
-                DetailLine("Original amount", money(loan.principal))
+                DetailLine("Principal amount", money(loan.principal))
                 DetailLine("Interest rate", "${loan.monthlyRate}% per month")
-                DetailLine("Interest added so far", money(interest))
+                DetailLine("Interest till now", money(interest))
                 DetailLine("Payments made", money(totalPaid))
                 DetailLine("Amount still due", money(outstanding))
                 DetailLine("Status", if (outstanding <= 0.009) "Fully paid" else "Still to be paid")
