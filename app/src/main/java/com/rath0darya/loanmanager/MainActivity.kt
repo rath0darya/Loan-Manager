@@ -692,7 +692,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                 canvas.drawRoundRect(left, y, right, y + h - 6f, 12f, 12f, paint)
                 paint.color = muted
                 paint.textSize = 22f
-                paint.typeface = android.graphics.Typeface.NORMAL
+                paint.typeface = android.graphics.Typeface.DEFAULT
                 canvas.drawText(row.label.take(58), left + 18f, y + 29f, paint)
                 paint.color = ink
                 paint.textSize = 27f
@@ -709,7 +709,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
         paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
         canvas.drawText("FundNiti • Personal lending, clearly organised", left, footer + 42f, paint)
         paint.textSize = 19f
-        paint.typeface = android.graphics.Typeface.NORMAL
+        paint.typeface = android.graphics.Typeface.DEFAULT
         canvas.drawText("For reference only • Verify details before sharing", left, footer + 78f, paint)
 
         val dir = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
@@ -754,7 +754,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                     } else {
                         p.color = if (rowIndex % 2 == 0) pale else android.graphics.Color.WHITE
                         pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 5f, 5f, p)
-                        p.color = muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.NORMAL
+                        p.color = muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.DEFAULT
                         pc.drawText(row.label.take(34), 40f, py + 14f, p)
                         p.color = ink; p.textSize = 11f; p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                         pc.drawText(row.value.take(66), 40f, py + 29f, p)
