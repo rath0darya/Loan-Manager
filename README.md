@@ -24,20 +24,12 @@ An elegant, offline-first Android loan ledger for money lent, money borrowed, an
 
 ## ✨ Features
 
-<table>
-  <tr>
-    <td width="50%"><h3>👥 People &amp; loans</h3>Track multiple people, loan direction, principal, monthly rate, dates, and notes.</td>
-    <td width="50%"><h3>🧮 Interest calculation</h3>Fixed monthly simple interest with daily proration for partial monthly periods.</td>
-  </tr>
-  <tr>
-    <td><h3>💸 Repayment ledger</h3>Keep payment dates, methods, transaction references, and notes together.</td>
-    <td><h3>📊 Balances &amp; insights</h3>Review paid amounts, outstanding balances, portfolio totals, and monthly comparisons.</td>
-  </tr>
-  <tr>
-    <td><h3>🔔 Search &amp; reminders</h3>Find loan records and schedule reminders for due dates.</td>
-    <td><h3>🛡️ Backup &amp; restore</h3>Save local snapshots and export or restore backup files.</td>
-  </tr>
-</table>
+- **People & loans** — Track multiple people, loan direction, principal, monthly rate, dates, and notes.
+- **Interest calculation** — Fixed monthly simple interest with daily proration for partial monthly periods.
+- **Repayment ledger** — Keep payment dates, methods, transaction references, and notes together.
+- **Balances & insights** — Review paid amounts, outstanding balances, portfolio totals, and monthly comparisons.
+- **Search & reminders** — Find loan records and schedule reminders for due dates.
+- **Backup & restore** — Replace the automatic snapshot with the latest full database state; export or restore backup files.
 
 ## 🎨 Appearance
 
@@ -58,26 +50,22 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 
 > Interest conventions differ between agreements and lenders. Confirm the applicable method before using a result as a settlement figure. FundNiti is a tracking tool, not financial or legal advice.
 
-## 🔐 Storage, privacy &amp; recovery
+## 🔐 Storage, privacy & recovery
 
 - The Room database is the app's working database and remains inside Android's app sandbox.
-- Automatic backup path: `Android/media/com.rath0darya.loanmanager/FundNiti/backup/FundNiti-Data.json`.
-- If the app is reinstalled and its new database is empty, FundNiti checks the Android/media snapshot and restores records if the file is present and readable.
-- Open **Backup → Back up all data now** to create a current snapshot.
+- The current automatic snapshot is saved to `Download/FundNiti/Backup/Lendora-Data.json` in shared Downloads.
+- Each backup run replaces the existing snapshot with the latest complete database state; it does not append to old data.
+- On a fresh installation, FundNiti checks the automatic snapshot and restores records if the database is empty and the backup is present and readable.
+- Open **Backup → Back up all data now** to write a fresh snapshot immediately.
 - Manual `.lendora` exports use AES-GCM encryption with Android Keystore and are generally tied to the original installation/device key.
-- **Important:** the automatic JSON snapshot is unencrypted so a fresh installation can read it without the old Keystore key. It contains sensitive financial records. Protect your device and do not share the file.
+- The automatic JSON snapshot is unencrypted so a fresh installation can read it without the old Keystore key. It contains sensitive financial records; protect your device and do not share the file.
 - Keep a second backup copy in a location you control; no app can guarantee recovery after storage cleanup, device failure, or file deletion.
 
 ## 🛠️ Download or build
 
-<div align="center">
-
-| Get the app | Build from source |
-|---|---|
-| [**Download/LoanManager.apk**](Download/LoanManager.apk) | Android Studio + JDK 17 + compatible Android SDK |
-| [Latest Actions runs](https://github.com/rath0darya/Loan-Manager/actions) | Clone the repo, sync Gradle, then run on a device or emulator |
-
-</div>
+- **Install the APK:** [Download LoanManager.apk](Download/LoanManager.apk)
+- **Build status:** [Latest GitHub Actions runs](https://github.com/rath0darya/Loan-Manager/actions)
+- **Build from source:** Open the repository in Android Studio with JDK 17 and the Android SDK required by the project, sync Gradle, then run on a device or emulator.
 
 ## 🧱 Technology
 
@@ -89,13 +77,12 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 
 ## 📱 App details
 
-| Property | Value |
-|---|---|
-| App name | FundNiti |
-| Application ID | `com.rath0darya.loanmanager` |
-| Data storage | On-device Room database |
-| Network backend | None required |
-| Interest method | Fixed monthly simple interest with daily proration for partial periods |
+- **App name:** FundNiti
+- **Application ID:** `com.rath0darya.loanmanager`
+- **Data storage:** On-device Room database
+- **Network backend:** None required
+- **Interest method:** Fixed monthly simple interest with daily proration for partial periods
+
 
 ---
 
