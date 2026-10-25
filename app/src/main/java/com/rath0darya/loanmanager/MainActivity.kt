@@ -611,7 +611,7 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
     val period = Period.between(start, end)
     val months = period.years * 12 + period.months
     val rows = mutableListOf(
-        LoanReportLine("People", listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ").ifBlank { "Not specified" }, true),
+        LoanReportLine("People", listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ").ifBlank { "Not specified" }),
         LoanReportLine("Loan direction", when (loan.direction) { "LENT" -> "You gave money to someone"; "BORROWED_FOR_OTHER" -> "Borrowed from one person for another"; else -> "Borrowed for yourself" }),
         LoanReportLine("Loan details", "", true),
         LoanReportLine("Loan date", formatDate(loan.startDate)),
@@ -655,7 +655,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
     val right = width - 64f
     val headerHeight = 250f
     val heights = rows.map { if (it.section) 62f else 82f }
-    val imageHeight = (headerHeight + heights.sum() + 150f).toInt().coerceAtMost(24000)
+    val imageHeight = (headerHeight + heights.sum() + 150f).toInt().coerceAtLeast(1000)
     val bitmap = android.graphics.Bitmap.createBitmap(width, imageHeight, android.graphics.Bitmap.Config.ARGB_8888)
     try {
         val canvas = android.graphics.Canvas(bitmap)
