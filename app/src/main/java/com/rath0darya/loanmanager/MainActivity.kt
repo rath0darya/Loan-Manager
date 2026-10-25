@@ -128,19 +128,19 @@ import java.time.ZoneId
 import java.time.Period
 import java.time.temporal.ChronoUnit
 
-private fun modernTypography(): androidx.compose.material3.Typography {
+private fun modernTypography(colors: androidx.compose.material3.ColorScheme): androidx.compose.material3.Typography {
     val base = androidx.compose.material3.Typography()
     val font = FontFamily.SansSerif
     return base.copy(
-        displayLarge = base.displayLarge.copy(fontFamily = font),
-        displayMedium = base.displayMedium.copy(fontFamily = font),
-        displaySmall = base.displaySmall.copy(fontFamily = font),
-        headlineLarge = base.headlineLarge.copy(fontFamily = font),
-        headlineMedium = base.headlineMedium.copy(fontFamily = font),
-        headlineSmall = base.headlineSmall.copy(fontFamily = font),
-        titleLarge = base.titleLarge.copy(fontFamily = font),
-        titleMedium = base.titleMedium.copy(fontFamily = font),
-        titleSmall = base.titleSmall.copy(fontFamily = font),
+        displayLarge = base.displayLarge.copy(fontFamily = font, color = colors.primary),
+        displayMedium = base.displayMedium.copy(fontFamily = font, color = colors.primary),
+        displaySmall = base.displaySmall.copy(fontFamily = font, color = colors.primary),
+        headlineLarge = base.headlineLarge.copy(fontFamily = font, color = colors.primary),
+        headlineMedium = base.headlineMedium.copy(fontFamily = font, color = colors.primary),
+        headlineSmall = base.headlineSmall.copy(fontFamily = font, color = colors.primary),
+        titleLarge = base.titleLarge.copy(fontFamily = font, color = colors.primary),
+        titleMedium = base.titleMedium.copy(fontFamily = font, color = colors.primary),
+        titleSmall = base.titleSmall.copy(fontFamily = font, color = colors.primary),
         bodyLarge = base.bodyLarge.copy(fontFamily = font),
         bodyMedium = base.bodyMedium.copy(fontFamily = font),
         bodySmall = base.bodySmall.copy(fontFamily = font),
@@ -317,7 +317,7 @@ private fun LoanManagerApp() {
         }
     }
 
-    MaterialTheme(colorScheme = appColorScheme, typography = modernTypography()) {
+    MaterialTheme(colorScheme = appColorScheme, typography = modernTypography(appColorScheme)) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets.safeDrawing,
