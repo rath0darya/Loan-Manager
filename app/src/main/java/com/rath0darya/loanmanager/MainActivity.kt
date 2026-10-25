@@ -1079,16 +1079,10 @@ private fun InterestCalculatorCard() {
                 HorizontalResultLine("Interest amount", money(interest))
                 HorizontalResultLine("Principal + interest", money(principal!! + interest))
                 HorizontalResultLine("Duration", "${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days")
-                androidx.compose.material3.Button(
-                    onClick = {
-                        shareCalculatorResult(
-                            context,
-                            "Interest Calculator",
-                            "INTEREST CALCULATION RESULT\nPrincipal: ${money(principal!!)}\nMonthly interest rate: ${rateText}%\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\nInterest amount: ${money(interest)}\nPrincipal + interest: ${money(principal + interest)}"
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Share result") }
+                androidx.compose.material3.                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { shareCalculatorResult(context, "Interest Calculator", "INTEREST CALCULATION RESULT\\nPrincipal: ${money(principal!!)}\\nMonthly interest rate: ${rateText}%\\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\\nInterest amount: ${money(interest)}\\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share image") }
+                    Button(onClick = { shareCalculatorResultPdf(context, "Interest Calculator", "INTEREST CALCULATION RESULT\\nPrincipal: ${money(principal!!)}\\nMonthly interest rate: ${rateText}%\\nDuration: ${monthsText.toLongOrNull() ?: 0} months, ${daysText.toLongOrNull() ?: 0} days\\nInterest amount: ${money(interest)}\\nPrincipal + interest: ${money(principal + interest)}") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
+                }
             } else {
                 Text("Enter a positive principal, a non-negative rate, and a valid duration.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1172,16 +1166,10 @@ private fun TenureCalculatorCard() {
                         HorizontalResultLine("Total days", "$totalDays days")
                     }
                 }
-                androidx.compose.material3.Button(
-                    onClick = {
-                        shareCalculatorResult(
-                            context,
-                            "Tenure Calculator",
-                            "DATE DURATION RESULT\nFrom: ${formatDate(fromDateMillis)}\nTo: ${formatDate(toDateMillis)}\nDuration: $totalMonths months, ${period.days} days\nTotal days: $totalDays"
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Share result") }
+                androidx.compose.material3.                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { shareCalculatorResult(context, "Tenure Calculator", "DATE DURATION RESULT\\nFrom: ${formatDate(fromDateMillis)}\\nTo: ${formatDate(toDateMillis)}\\nDuration: $totalMonths months, ${period.days} days\\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share image") }
+                    Button(onClick = { shareCalculatorResultPdf(context, "Tenure Calculator", "DATE DURATION RESULT\\nFrom: ${formatDate(fromDateMillis)}\\nTo: ${formatDate(toDateMillis)}\\nDuration: $totalMonths months, ${period.days} days\\nTotal days: $totalDays") }, modifier = Modifier.weight(1f)) { Text("Share PDF") }
+                }
                 Text(
                     "Calendar months follow the selected dates, including different month lengths and leap years. This calculation does not change saved loan records.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1193,20 +1181,85 @@ private fun TenureCalculatorCard() {
 }
 
 private fun shareCalculatorResult(context: android.content.Context, title: String, result: String) {
-    val shareText = buildString {
-        append("FundNiti • Personal lending, clearly organised\n")
-        append("────────────────────────\n")
-        append(result)
-        append("\n\nCalculated with FundNiti. For reference only; not a saved loan record.")
-    }
-    val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(android.content.Intent.EXTRA_SUBJECT, "FundNiti — $title")
-        putExtra(android.content.Intent.EXTRA_TEXT, shareText)
-    }
-    context.startActivity(android.content.Intent.createChooser(sendIntent, "Share FundNiti result"))
+    val navy = android.graphics.Color.rgb(20, 45, 66)
+    val teal = android.graphics.Color.rgb(18, 107, 85)
+    val gold = android.graphics.Color.rgb(197, 155, 67)
+    val ink = android.graphics.Color.rgb(32, 48, 43)
+    val muted = android.graphics.Color.rgb(91, 111, 102)
+    val pale = android.graphics.Color.rgb(239, 247, 243)
+    val width = 1080; val margin = 64f
+    val lines = result.lines().filter { it.isNotBlank() }
+    val height = (300 + lines.size * 90).coerceAtLeast(850)
+    val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+    try {
+        val canvas = android.graphics.Canvas(bitmap); canvas.drawColor(android.graphics.Color.WHITE)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }
+        canvas.drawRect(0f, 0f, width.toFloat(), 220f, p)
+        p.color = gold; canvas.drawRoundRect(42f, 34f, 50f, 178f, 4f, 4f, p)
+        p.color = android.graphics.Color.WHITE; p.textSize = 48f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD; canvas.drawText("FundNiti", 76f, 84f, p)
+        p.textSize = 28f; p.typeface = android.graphics.Typeface.DEFAULT; canvas.drawText(title, 76f, 130f, p)
+        p.textSize = 19f; canvas.drawText("CALCULATION SUMMARY", 76f, 172f, p)
+        var y = 246f
+        lines.forEachIndexed { index, line ->
+            val rowHeight = 66f
+            p.color = if (index % 2 == 0) pale else android.graphics.Color.WHITE
+            canvas.drawRoundRect(margin, y, width - margin, y + rowHeight, 14f, 14f, p)
+            p.color = if (index == 0) teal else ink; p.textSize = if (index == 0) 29f else 25f
+            p.typeface = if (index == 0) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+            val chunks = line.chunked(52)
+            chunks.forEachIndexed { j, chunk -> canvas.drawText(chunk, margin + 20f, y + 39f + j * 29f, p) }
+            y += rowHeight + 8f
+        }
+        p.color = navy; canvas.drawRect(0f, height - 70f, width.toFloat(), height.toFloat(), p)
+        p.color = android.graphics.Color.WHITE; p.textSize = 18f; p.typeface = android.graphics.Typeface.DEFAULT
+        canvas.drawText("For reference only · No saved loan records changed", margin, height - 38f, p)
+        val directory = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
+        val file = java.io.File(directory, "FundNiti-Calculator-Result.png")
+        java.io.FileOutputStream(file).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        shareCalculatorFile(context, title, file, false)
+    } catch (e: Exception) { Toast.makeText(context, "Could not share calculation: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show() }
+    finally { bitmap.recycle() }
 }
 
+private fun shareCalculatorResultPdf(context: android.content.Context, title: String, result: String) {
+    val navy = android.graphics.Color.rgb(20, 45, 66); val teal = android.graphics.Color.rgb(18, 107, 85)
+    val ink = android.graphics.Color.rgb(32, 48, 43); val muted = android.graphics.Color.rgb(91, 111, 102)
+    val pale = android.graphics.Color.rgb(239, 247, 243)
+    val lines = result.lines().filter { it.isNotBlank() }
+    val directory = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
+    val file = java.io.File(directory, "FundNiti-Calculator-Result.pdf")
+    val doc = android.graphics.pdf.PdfDocument()
+    try {
+        val pageWidth = 595; val pageHeight = 842
+        val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create())
+        val canvas = page.canvas; canvas.drawColor(android.graphics.Color.WHITE)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }; canvas.drawRect(0f, 0f, pageWidth.toFloat(), 140f, p)
+        p.color = android.graphics.Color.WHITE; p.textSize = 27f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD; canvas.drawText("FundNiti", 38f, 55f, p)
+        p.textSize = 15f; p.typeface = android.graphics.Typeface.DEFAULT; canvas.drawText(title, 38f, 86f, p); p.textSize = 10f; canvas.drawText("CALCULATION SUMMARY", 38f, 112f, p)
+        var y = 164f
+        lines.forEachIndexed { index, line ->
+            p.textSize = 12f; p.typeface = if (index == 0) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+            val chunks = line.chunked(62); val h = maxOf(38f, chunks.size * 18f + 16f)
+            p.color = if (index % 2 == 0) pale else android.graphics.Color.WHITE; canvas.drawRoundRect(28f, y, pageWidth - 28f, y + h, 7f, 7f, p)
+            p.color = if (index == 0) teal else ink; chunks.forEachIndexed { j, chunk -> canvas.drawText(chunk, 40f, y + 24f + j * 18f, p) }; y += h + 8f
+        }
+        p.color = muted; p.textSize = 9f; canvas.drawText("For reference only · No saved loan records changed", 30f, pageHeight - 24f, p)
+        doc.finishPage(page); java.io.FileOutputStream(file).use { doc.writeTo(it) }
+        shareCalculatorFile(context, title, file, true)
+    } catch (e: Exception) { Toast.makeText(context, "Could not create calculator PDF: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show() }
+    finally { doc.close() }
+}
+
+private fun shareCalculatorFile(context: android.content.Context, title: String, file: java.io.File, asPdf: Boolean) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = if (asPdf) "application/pdf" else "image/png"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri); putExtra(android.content.Intent.EXTRA_SUBJECT, "FundNiti — " + title)
+        putExtra(android.content.Intent.EXTRA_TEXT, "FundNiti " + title + " result. For reference only; no saved loan records changed.")
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(android.content.Intent.createChooser(intent, if (asPdf) "Share calculator PDF" else "Share calculator image"))
+}
 @Composable
 private fun HorizontalResultLine(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
