@@ -325,13 +325,13 @@ private fun LoanManagerApp() {
             topBar = {
                 TopAppBar(
                     colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
+                        containerColor = MaterialTheme.colorScheme.primary
                     ),
                     title = {
                         Column {
                             Text("FundNiti", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                             Text(page.label, style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary)
+                                color = MaterialTheme.colorScheme.onPrimary)
                         }
                     },
                     actions = {
@@ -783,7 +783,8 @@ private fun LoanDetailsDialog(
     onDismiss: () -> Unit,
     onEditPayment: (PaymentEntity) -> Unit,
     onDeletePayment: (PaymentEntity) -> Unit
-) {\n    val context = LocalContext.current
+) {
+    val context = LocalContext.current
     val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
     val totalPaid = payments.sumOf { it.amount }
     val loanStartDate = Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
