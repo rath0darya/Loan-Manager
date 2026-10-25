@@ -637,7 +637,12 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
         if (payment.referenceNumber.isNotBlank()) rows.add(LoanReportLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction number", payment.referenceNumber))
         if (payment.note.isNotBlank()) rows.add(LoanReportLine("Payment notes", payment.note))
     }
-    return rows
+    return rows.flatMap { row ->
+        if (row.section || row.value.length <= 54) listOf(row)
+        else row.value.chunked(54).mapIndexed { index, chunk ->
+            LoanReportLine(if (index == 0) row.label else row.label + " (cont.)", chunk)
+        }
+    }
 }
 
 private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double, asPdf: Boolean) {
@@ -651,7 +656,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
     val left = 64f
     val right = width - 64f
     val headerHeight = 250f
-    val heights = rows.map { if (it.section) 62f else 78f + (it.value.length / 48) * 32f }
+    val heights = rows.map { if (it.section) 62f else 82f }
     val imageHeight = (headerHeight + heights.sum() + 150f).toInt().coerceAtMost(24000)
     val bitmap = android.graphics.Bitmap.createBitmap(width, imageHeight, android.graphics.Bitmap.Config.ARGB_8888)
     try {
@@ -694,7 +699,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                 paint.color = ink
                 paint.textSize = 27f
                 paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                row.value.chunked(54).take(4).forEachIndexed { line, value -> canvas.drawText(value, left + 18f, y + 59f + line * 44f, paint) }
+                canvas.drawText(row.value, left + 18f, y + 59f, paint)
             }
             y += h
         }
@@ -725,9 +730,18 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                 val hp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }
                 pc.drawRect(0f, 0f, pageW.toFloat(), headerHeight * scale, hp)
                 val title = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 25f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
-                pc.drawText("FundNiti", 36f, 42f, title)
+                try {
+                    val drawable = context.packageManager.getApplicationIcon(context.packageName)
+                    val logo = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+                    val logoCanvas = android.graphics.Canvas(logo)
+                    drawable.setBounds(0, 0, 48, 48)
+                    drawable.draw(logoCanvas)
+                    pc.drawBitmap(logo, 32f, 18f, title)
+                    logo.recycle()
+                } catch (_: Exception) {}
+                pc.drawText("FundNiti", 90f, 42f, title)
                 title.textSize = 14f
-                pc.drawText("FULL LOAN REPORT", 36f, 64f, title)
+                pc.drawText("FULL LOAN REPORT", 90f, 64f, title)
                 val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
                 var py = headerHeight * scale + 18f
                 val maxY = pageH - 45f
@@ -745,7 +759,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                         p.color = muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.NORMAL
                         pc.drawText(row.label.take(34), 40f, py + 14f, p)
                         p.color = ink; p.textSize = 11f; p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                        row.value.chunked(66).take(4).forEachIndexed { line, value -> pc.drawText(value, 40f, py + 29f + line * 11f, p) }
+                        pc.drawText(row.value.take(66), 40f, py + 29f, p)
                     }
                     py += rh
                     rowIndex++
