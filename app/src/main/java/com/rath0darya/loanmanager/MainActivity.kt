@@ -329,7 +329,7 @@ private fun LoanManagerApp() {
                     ),
                     title = {
                         Column {
-                            Text("FundNiti", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text("FundNiti", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                             Text(page.label, style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary)
                         }
@@ -617,9 +617,9 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
         LoanReportLine("Loan direction", when (loan.direction) { "LENT" -> "You gave money to someone"; "BORROWED_FOR_OTHER" -> "Borrowed from one person for another"; else -> "Borrowed for yourself" }),
         LoanReportLine("Loan details", "", true),
         LoanReportLine("Loan date", formatDate(loan.startDate)),
-        LoanReportLine("Duration", "\$months months, \${period.days} days (\${ChronoUnit.DAYS.between(start, end)} days total)"),
+        LoanReportLine("Duration", "$months months, ${period.days} days (${ChronoUnit.DAYS.between(start, end)} days total)"),
         LoanReportLine("Principal amount", money(loan.principal)),
-        LoanReportLine("Interest rate", "\${loan.monthlyRate}% per month"),
+        LoanReportLine("Interest rate", "${loan.monthlyRate}% per month"),
         LoanReportLine("Interest till now", money(interest)),
         LoanReportLine("Payments made", money(paid)),
         LoanReportLine("Amount still due", money(outstanding)),
@@ -627,10 +627,10 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
     )
     loan.dueDate?.let { rows.add(LoanReportLine("Reminder date", formatDate(it))) }
     if (loan.note.isNotBlank()) rows.add(LoanReportLine("Loan notes", loan.note))
-    rows.add(LoanReportLine("Payment history (\${payments.size})", "", true))
+    rows.add(LoanReportLine("Payment history (${payments.size})", "", true))
     if (payments.isEmpty()) rows.add(LoanReportLine("Payments", "No payments recorded"))
     payments.forEachIndexed { index, payment ->
-        rows.add(LoanReportLine("Payment \${index + 1}: \${money(payment.amount)}", "", true))
+        rows.add(LoanReportLine("Payment ${index + 1}: ${money(payment.amount)}", "", true))
         rows.add(LoanReportLine("Date", formatDate(payment.paidAt)))
         rows.add(LoanReportLine("Time", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(payment.paidAt))))
         rows.add(LoanReportLine("Method", payment.paymentMethod))
@@ -751,7 +751,7 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                     rowIndex++
                 }
                 val foot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy; textSize = 9f }
-                pc.drawText("FundNiti • For reference only • Page \$pageNo", 32f, pageH - 18f, foot)
+                pc.drawText("FundNiti • For reference only • Page $pageNo", 32f, pageH - 18f, foot)
                 doc.finishPage(page)
                 pageNo++
             } while (rowIndex < rows.size)
@@ -783,7 +783,7 @@ private fun LoanDetailsDialog(
     onDismiss: () -> Unit,
     onEditPayment: (PaymentEntity) -> Unit,
     onDeletePayment: (PaymentEntity) -> Unit
-) {
+) {\n    val context = LocalContext.current
     val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
     val totalPaid = payments.sumOf { it.amount }
     val loanStartDate = Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -794,14 +794,14 @@ private fun LoanDetailsDialog(
     val totalMonths = elapsedPeriod.years * 12 + elapsedPeriod.months
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Full loan report") },
+        title = { Text("Full loan report", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.fillMaxWidth().height(520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("People", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("People", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Text(listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → "))
                 Text(when (loan.direction) { "LENT" -> "You gave money to someone."; "BORROWED_FOR_OTHER" -> "You borrowed money from one person and gave it to someone else."; else -> "You borrowed money for yourself." })
                 androidx.compose.material3.HorizontalDivider()
-                Text("Loan details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Loan details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 DetailLine("Loan date", formatDate(loan.startDate))
                 DetailLine("Total Days", "$totalDays Days")
                 DetailLine("In Months", String.format(Locale.getDefault(), "%02d Months %02d Days", totalMonths, elapsedPeriod.days))
@@ -814,7 +814,7 @@ private fun LoanDetailsDialog(
                 loan.dueDate?.let { DetailLine("Reminder date", formatDate(it)) }
                 if (loan.note.isNotBlank()) DetailLine("Notes", loan.note)
                 androidx.compose.material3.HorizontalDivider()
-                Text("Payments made (${payments.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Payments made (${payments.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 if (payments.isEmpty()) Text("No payments recorded yet.")
                 payments.forEachIndexed { index, payment ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -837,6 +837,15 @@ private fun LoanDetailsDialog(
                     }
                 }
                 Text("You can change or delete any payment. The amount still due updates automatically.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Share full report", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { shareLoanReport(context = context, loan = loan, payments = payments, outstanding = outstanding, asPdf = true) }, modifier = Modifier.weight(1f)) {
+                        Text("Share PDF")
+                    }
+                    Button(onClick = { shareLoanReport(context = androidx.compose.ui.platform.LocalContext.current, loan = loan, payments = payments, outstanding = outstanding, asPdf = false) }, modifier = Modifier.weight(1f)) {
+                        Text("Share image")
+                    }
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close report") } }
