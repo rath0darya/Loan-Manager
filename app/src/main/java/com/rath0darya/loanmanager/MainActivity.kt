@@ -1016,27 +1016,38 @@ private fun CalculatorsScreen(modifier: Modifier) {
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Loan calculators", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Calculators", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "Estimate interest or calculate the exact calendar duration between two dates. Share a clear, ready-to-send result directly to your favourite social app.",
+            "Calculate loan interest, date tenure, or paddy weight and value. Share any result as an image or PDF.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                androidx.compose.material3.FilterChip(
+                    selected = selected == "INTEREST",
+                    onClick = { selected = "INTEREST" },
+                    label = { Text("Interest") }
+                )
+                androidx.compose.material3.FilterChip(
+                    selected = selected == "TENURE",
+                    onClick = { selected = "TENURE" },
+                    label = { Text("Tenure") }
+                )
+            }
             androidx.compose.material3.FilterChip(
-                selected = selected == "INTEREST",
-                onClick = { selected = "INTEREST" },
-                label = { Text("Interest Calculator") }
-            )
-            androidx.compose.material3.FilterChip(
-                selected = selected == "TENURE",
-                onClick = { selected = "TENURE" },
-                label = { Text("Tenure Calculator") }
+                selected = selected == "PADDY",
+                onClick = { selected = "PADDY" },
+                label = { Text("Paddy Calculator") }
             )
         }
-        if (selected == "INTEREST") InterestCalculatorCard() else TenureCalculatorCard()
+        when (selected) {
+            "INTEREST" -> InterestCalculatorCard()
+            "TENURE" -> TenureCalculatorCard()
+            else -> PaddyCalculatorCard()
+        }
         Text(
-            "These are estimates only and do not change saved loan records.",
+            "Calculations are estimates only and do not change saved loan records.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1183,6 +1194,188 @@ private fun TenureCalculatorCard() {
                 }
                 Text(
                     "Calendar months follow the selected dates, including different month lengths and leap years. This calculation does not change saved loan records.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaddyCalculatorCard() {
+    val context = LocalContext.current
+    var calculationType by remember { mutableStateOf("TYPE1") }
+    var bagsText by remember { mutableStateOf("131") }
+    var bagWeightText by remember { mutableStateOf("40") }
+    var cuttingMode by remember { mutableStateOf("BAG") }
+    var cuttingText by remember { mutableStateOf("1") }
+    var priceText by remember { mutableStateOf("") }
+
+    val bags = bagsText.toLongOrNull()
+    val bagWeightKg = bagWeightText.replace(",", "").trim().toDoubleOrNull()
+    val cuttingKg = cuttingText.replace(",", "").trim().toDoubleOrNull()
+    val pricePerQuintal = priceText.replace(",", "").trim().toDoubleOrNull()
+    val validBase = bags != null && bags > 0 && bags <= 1_000_000_000L &&
+        bagWeightKg != null && bagWeightKg > 0 && bagWeightKg <= 100_000.0
+    val grossQuintals = if (validBase) bags!!.toDouble() * bagWeightKg!! / 100.0 else null
+    val validCutting = calculationType == "TYPE1" ||
+        (cuttingKg != null && cuttingKg >= 0 && cuttingKg <= 100_000.0)
+    val cuttingQuintals = if (calculationType == "TYPE2" && grossQuintals != null && validCutting) {
+        if (cuttingMode == "BAG") bags!!.toDouble() * cuttingKg!! / 100.0
+        else grossQuintals * cuttingKg!! / 100.0
+    } else 0.0
+    val finalQuintals = grossQuintals?.let { (it - cuttingQuintals).coerceAtLeast(0.0) }
+    val validPrice = priceText.isBlank() || (pricePerQuintal != null && pricePerQuintal >= 0 && pricePerQuintal <= 1_000_000_000.0)
+    val amount = if (validPrice && priceText.isNotBlank() && finalQuintals != null) finalQuintals * pricePerQuintal!! else null
+    val valid = validBase && validCutting && validPrice &&
+        (calculationType != "TYPE2" || (cuttingQuintals <= (grossQuintals ?: 0.0) + 1e-9))
+
+    fun number(value: Double): String = DecimalFormat(
+        "#,##0.##", DecimalFormatSymbols(Locale.US)
+    ).format(value)
+
+    val resultText = if (valid && grossQuintals != null && finalQuintals != null) buildString {
+        appendLine("PADDY CALCULATION RESULT")
+        appendLine("Calculation: ${if (calculationType == "TYPE1") "Type 1 — Gross paddy" else "Type 2 — Paddy after cutting"}")
+        appendLine("Total bags: $bags")
+        appendLine("Weight per bag: ${number(bagWeightKg!!)} kg")
+        appendLine("Total paddy: ${number(grossQuintals)} quintals")
+        if (calculationType == "TYPE2") {
+            appendLine("Cutting method: ${if (cuttingMode == "BAG") "Per bag" else "Per quintal"}")
+            appendLine("Cutting rate: ${number(cuttingKg!!)} kg ${if (cuttingMode == "BAG") "per bag" else "per quintal"}")
+            appendLine("Total cutting: ${number(cuttingQuintals * 100.0)} kg (${number(cuttingQuintals)} quintals)")
+            appendLine("Final paddy: ${number(finalQuintals)} quintals")
+        }
+        if (priceText.isNotBlank() && amount != null) {
+            appendLine("Price per quintal: ${money(pricePerQuintal!!)}")
+            appendLine("Total amount: ${money(amount)}")
+        } else {
+            appendLine("Price per quintal: Not provided")
+            appendLine("Total amount: Not calculated")
+        }
+        append("Formula: ${bags} bags × ${number(bagWeightKg!!)} kg ÷ 100 = ${number(grossQuintals)} quintals")
+    } else ""
+
+    Card(
+        Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Paddy Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "Convert bag weights into quintals and optionally calculate the amount at your price per quintal.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                androidx.compose.material3.FilterChip(
+                    selected = calculationType == "TYPE1",
+                    onClick = { calculationType = "TYPE1" },
+                    label = { Text("Type 1 · Total") }
+                )
+                androidx.compose.material3.FilterChip(
+                    selected = calculationType == "TYPE2",
+                    onClick = { calculationType = "TYPE2" },
+                    label = { Text("Type 2 · Cutting") }
+                )
+            }
+            OutlinedTextField(
+                value = bagsText,
+                onValueChange = { bagsText = it.filter(Char::isDigit).take(10) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Total bags") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = bagWeightText,
+                onValueChange = { bagWeightText = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Weight of single bag (kg)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true
+            )
+            if (calculationType == "TYPE2") {
+                Text("Cutting unit", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    androidx.compose.material3.FilterChip(
+                        selected = cuttingMode == "BAG",
+                        onClick = { cuttingMode = "BAG" },
+                        label = { Text("Per bag (kg)") }
+                    )
+                    androidx.compose.material3.FilterChip(
+                        selected = cuttingMode == "QUINTAL",
+                        onClick = { cuttingMode = "QUINTAL" },
+                        label = { Text("Per quintal (kg)") }
+                    )
+                }
+                OutlinedTextField(
+                    value = cuttingText,
+                    onValueChange = { cuttingText = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(if (cuttingMode == "BAG") "Cutting for each bag (kg)" else "Cutting for each quintal (kg)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true
+                )
+            }
+            OutlinedTextField(
+                value = priceText,
+                onValueChange = { priceText = it.filter { c -> c.isDigit() || c == '.' || c == ',' }.take(16) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Price per quintal (₹, optional)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true
+            )
+
+            if (valid && grossQuintals != null && finalQuintals != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Calculation result", style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
+                        HorizontalResultLine("Total paddy", "${number(grossQuintals)} quintals")
+                        if (calculationType == "TYPE2") {
+                            HorizontalResultLine("Total cutting", "${number(cuttingQuintals * 100.0)} kg")
+                            HorizontalResultLine("Final paddy", "${number(finalQuintals)} quintals")
+                        }
+                        if (priceText.isNotBlank() && amount != null) {
+                            HorizontalResultLine("Price per quintal", money(pricePerQuintal!!))
+                            HorizontalResultLine("Total amount", money(amount))
+                        } else {
+                            Text("Add a price per quintal to calculate the total amount.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Text(
+                    if (calculationType == "TYPE1")
+                        "${bags} bags × ${number(bagWeightKg!!)} kg ÷ 100 = ${number(grossQuintals)} quintals"
+                    else if (cuttingMode == "BAG")
+                        "${number(grossQuintals)} quintals − (${bags} bags × ${number(cuttingKg!!)} kg ÷ 100) = ${number(finalQuintals)} quintals"
+                    else
+                        "${number(grossQuintals)} quintals − (${number(grossQuintals)} × ${number(cuttingKg!!)} kg ÷ 100) = ${number(finalQuintals)} quintals",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { shareCalculatorResult(context, "Paddy Calculator", resultText) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Share image") }
+                    Button(
+                        onClick = { shareCalculatorResultPdf(context, "Paddy Calculator", resultText) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Share PDF") }
+                }
+            } else {
+                Text(
+                    "Enter a positive bag count and bag weight. Cutting must be non-negative, and the final paddy weight cannot be negative. Price is optional.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
