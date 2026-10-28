@@ -2551,6 +2551,9 @@ private fun EmptyState(title: String, message: String) {
 
 
 @Composable
+private fun paddyNumber(value: Double): String = DecimalFormat("#,##0.##", DecimalFormatSymbols(Locale("en", "IN"))).format(value)
+
+@Composable
 private fun PaddySeasonScreen(
     modifier: Modifier,
     records: List<SeasonPaddyEntity>,
@@ -2580,7 +2583,7 @@ private fun PaddySeasonScreen(
             singleLine = true, supportingText = { Text("Enter a season name or type All seasons") })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("Bags", totalBags.toString(), Modifier.weight(1f))
-            StatCard("Quintals", number(totalQuintals), Modifier.weight(1f))
+            StatCard("Quintals", paddyNumber(totalQuintals), Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("Total value", money(totalValue), Modifier.weight(1f))
@@ -2613,7 +2616,7 @@ private fun PaddySeasonScreen(
                         }
                         IconButton(onClick = { confirmDelete = record }) { Icon(Icons.Filled.Delete, contentDescription = "Delete paddy record") }
                     }
-                    DetailLine("Bags / weight", "${record.bags} bags · ${number(quintals)} quintals")
+                    DetailLine("Bags / weight", "${record.bags} bags · ${paddyNumber(quintals)} quintals")
                     DetailLine("Rate per quintal", money(record.ratePerQuintal))
                     DetailLine("Total value", money(value))
                     DetailLine("Paid / remaining", "${money(record.paidAmount)} / ${money((value - record.paidAmount).coerceAtLeast(0.0))}")
