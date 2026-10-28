@@ -159,6 +159,7 @@ private enum class AppPage(val label: String, val icon: ImageVector) {
     Calculators("Calculators", Icons.Filled.Calculate),
     Statistics("Stats", Icons.Filled.BarChart),
     Backup("Backup", Icons.Filled.Settings),
+    PaddySeasons("Paddy seasons", Icons.Filled.BarChart),
     More("More", Icons.Filled.Apps)
 }
 
@@ -213,6 +214,7 @@ private fun LoanManagerApp() {
     val dao = db.loanDao()
     val loans by dao.observeLoans().collectAsState(initial = emptyList())
     val payments by dao.observePayments().collectAsState(initial = emptyList())
+    val paddyRecords by dao.observeSeasonPaddy().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf(AppPage.Home) }
     var showAddLoan by remember { mutableStateOf(false) }
@@ -291,7 +293,9 @@ private fun LoanManagerApp() {
                 } else {
                     "Found ${existingLoans.size} local loans and ${existingPayments.size} repayments."
                 }
-                DurableBackup.writeAutomatic(context, createBackupJson(dao))
+                if (existingLoans.isNotEmpty() || existingPayments.isNotEmpty() || dao.allSeasonPaddy().isNotEmpty()) {
+                    DurableBackup.writeAutomatic(context, createBackupJson(dao))
+                }
                 status
             }
         } catch (e: Exception) {
@@ -361,7 +365,7 @@ private fun LoanManagerApp() {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                         listOf(AppPage.Home, AppPage.Loans, AppPage.People, AppPage.More).forEach { item ->
                             NavigationBarItem(
-                                selected = if (item == AppPage.More) page in listOf(AppPage.More, AppPage.Calculators, AppPage.Statistics, AppPage.Backup) else page == item,
+                                selected = if (item == AppPage.More) page in listOf(AppPage.More, AppPage.Calculators, AppPage.Statistics, AppPage.Backup, AppPage.PaddySeasons) else page == item,
                                 onClick = { page = item },
                                 icon = { Icon(item.icon, contentDescription = item.label) },
                                 label = { Text(item.label) }
@@ -396,6 +400,11 @@ private fun LoanManagerApp() {
                 AppPage.Calculators -> CalculatorsScreen(Modifier.padding(padding))
                 AppPage.Statistics -> StatisticsScreen(
                     Modifier.padding(padding), loans, payments, ::balance, totalOutstanding, totalPrincipal
+                )
+                AppPage.PaddySeasons -> PaddySeasonScreen(
+                    modifier = Modifier.padding(padding), records = paddyRecords,
+                    onSave = { record -> scope.launch { if (record.id == 0L) dao.addSeasonPaddy(record) else dao.updateSeasonPaddy(record) } },
+                    onDelete = { record -> scope.launch { dao.deleteSeasonPaddy(record.id) } }
                 )
                 AppPage.More -> MoreScreen(
                     modifier = Modifier.padding(padding),
@@ -1742,12 +1751,20 @@ private fun StatisticsScreen(
     }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Money reports", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Charts and totals from your saved loan and payment records.",
+        Text("Statistics & reports", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("A simple overview of what you lent, what you borrowed, how much has been paid, and what is still due.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        GlassPanel(title = "Your money at a glance", subtitle = "These are the main numbers to check first") {
+            DetailLine("Still to be paid / repaid", money(outstanding))
+            DetailLine("Original loan amounts", money(principal))
+            DetailLine("Payments recorded so far", money(paymentSum))
+            DetailLine("People in your records", "$peopleCount")
+            Text("Outstanding means the estimated balance remaining after recorded payments and accrued interest.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         StatCard("Total outstanding", money(outstanding), Modifier.fillMaxWidth())
         val totalInterestNow = loans.sumOf { accruedInterest(it.principal, it.monthlyRate, it.startDate, System.currentTimeMillis()) }
-        GlassPanel(title = "Total principal and interest", subtitle = "Original amounts compared with interest added so far") {
+        GlassPanel(title = "How the balance is calculated", subtitle = "Principal is the original amount. Interest is added using each loan's saved rate and dates.") {
             DetailLine("Total principal", money(principal))
             ComparisonBar("Principal", principal, maxOf(principal, totalInterestNow, 1.0), Color(0xFF16866B))
             DetailLine("Interest added", money(totalInterestNow))
@@ -1757,7 +1774,7 @@ private fun StatisticsScreen(
             StatCard("Money lent", money(lentBalance), Modifier.weight(1f))
             StatCard("Money borrowed", money(borrowedBalance), Modifier.weight(1f))
         }
-        GlassPanel(title = "Portfolio split · donut chart", subtitle = "Outstanding balance by direction") {
+        GlassPanel(title = "Who owes whom?", subtitle = "Compare the balance owed to you with the balance you owe others") {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 PortfolioDonut(lentBalance, borrowedBalance, Modifier.size(132.dp))
@@ -1767,12 +1784,12 @@ private fun StatisticsScreen(
                 }
             }
         }
-        GlassPanel(title = "Payments split", subtitle = "Estimated amount going to principal and interest in the last 6 months") {
+        GlassPanel(title = "Where payments are allocated", subtitle = "Estimated principal versus interest portions for the last 6 months") {
             StackedPaymentChart(stackedPayments)
             Text("This split is an estimate. The app records the full payment amount, not a lender-provided split.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        GlassPanel(title = "Amount still due over time", subtitle = "Estimated balance at the end of each of the last 6 months") {
+        GlassPanel(title = "Is the outstanding balance changing?", subtitle = "Estimated amount remaining at each of the last 6 month ends") {
             TrendLineChart(balanceTrend)
             Text("Uses loan dates, interest added, and payments recorded by each month end.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1802,7 +1819,8 @@ private fun StatisticsScreen(
         GlassPanel(title = "Repayment activity", subtitle = "Payments recorded in the last 6 months") {
             PaymentBars(paymentBars)
         }
-        Text("Principal and interest by person", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Breakdown by person", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("Open each person below to compare the original amount, estimated interest and amount still due.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val personBreakdown = loans.flatMap { loan ->
             listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.map { it.trim() to loan }
         }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it })
@@ -2529,6 +2547,143 @@ private fun EmptyState(title: String, message: String) {
 }
 
 
+
+@Composable
+private fun PaddySeasonScreen(
+    modifier: Modifier,
+    records: List<SeasonPaddyEntity>,
+    onSave: (SeasonPaddyEntity) -> Unit,
+    onDelete: (SeasonPaddyEntity) -> Unit
+) {
+    var editing by remember { mutableStateOf<SeasonPaddyEntity?>(null) }
+    var showEditor by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<SeasonPaddyEntity?>(null) }
+    var seasonFilter by remember { mutableStateOf("All seasons") }
+    val visible = records.filter { seasonFilter == "All seasons" || it.seasonName.contains(seasonFilter, true) }
+    val totalBags = visible.sumOf { it.bags }
+    val totalQuintals = visible.sumOf { it.bags * it.kgPerBag / 100.0 }
+    val totalValue = visible.sumOf { it.bags * it.kgPerBag / 100.0 * it.ratePerQuintal }
+    val totalPaid = visible.sumOf { it.paidAmount }
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Paddy seasons & storage", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Track harvest, stock location and payment due by season.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Button(onClick = { editing = null; showEditor = true }) { Text("Add") }
+        }
+        OutlinedTextField(value = seasonFilter, onValueChange = { seasonFilter = it.ifBlank { "All seasons" } },
+            label = { Text("Season filter") }, modifier = Modifier.fillMaxWidth(),
+            singleLine = true, supportingText = { Text("Enter a season name or type All seasons") })
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatCard("Bags", totalBags.toString(), Modifier.weight(1f))
+            StatCard("Quintals", number(totalQuintals), Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatCard("Total value", money(totalValue), Modifier.weight(1f))
+            StatCard("Paid", money(totalPaid), Modifier.weight(1f))
+        }
+        StatCard("Balance to pay", money((totalValue - totalPaid).coerceAtLeast(0.0)), Modifier.fillMaxWidth())
+        Text("1 quintal = 100 kg. Total value = bags × kg per bag ÷ 100 × rate per quintal.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (visible.isEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("No paddy records yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("Add a record for each farmer or storage lot. Season, bag count, weight, rate and payments are saved on this device.")
+                    Button(onClick = { editing = null; showEditor = true }) { Text("Add first paddy record") }
+                }
+            }
+        } else visible.forEach { record ->
+            val quintals = record.bags * record.kgPerBag / 100.0
+            val value = quintals * record.ratePerQuintal
+            Card(Modifier.fillMaxWidth().clickable { editing = record; showEditor = true },
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(record.farmerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(record.seasonName + if (record.paddyVariety.isBlank()) "" else " · " + record.paddyVariety,
+                                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = { confirmDelete = record }) { Icon(Icons.Filled.Delete, contentDescription = "Delete paddy record") }
+                    }
+                    DetailLine("Bags / weight", "${record.bags} bags · ${number(quintals)} quintals")
+                    DetailLine("Rate per quintal", money(record.ratePerQuintal))
+                    DetailLine("Total value", money(value))
+                    DetailLine("Paid / remaining", "${money(record.paidAmount)} / ${money((value - record.paidAmount).coerceAtLeast(0.0))}")
+                    DetailLine("Storage", record.storageLocation.ifBlank { "Not specified" })
+                    if (record.notes.isNotBlank()) Text(record.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Tap record to edit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+    if (showEditor) PaddyRecordDialog(existing = editing, onDismiss = { showEditor = false },
+        onSave = { record -> onSave(record); showEditor = false })
+    confirmDelete?.let { record ->
+        AlertDialog(onDismissRequest = { confirmDelete = null },
+            title = { Text("Delete paddy record?") },
+            text = { Text("Delete ${record.farmerName} · ${record.seasonName}? This cannot be undone.") },
+            confirmButton = { TextButton(onClick = { onDelete(record); confirmDelete = null }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } })
+    }
+}
+
+@Composable
+private fun PaddyRecordDialog(
+    existing: SeasonPaddyEntity?,
+    onDismiss: () -> Unit,
+    onSave: (SeasonPaddyEntity) -> Unit
+) {
+    var season by remember(existing?.id) { mutableStateOf(existing?.seasonName ?: LocalDate.now().year.toString() + " season") }
+    var farmer by remember(existing?.id) { mutableStateOf(existing?.farmerName ?: "") }
+    var variety by remember(existing?.id) { mutableStateOf(existing?.paddyVariety ?: "") }
+    var storage by remember(existing?.id) { mutableStateOf(existing?.storageLocation ?: "") }
+    var bags by remember(existing?.id) { mutableStateOf(existing?.bags?.toString() ?: "") }
+    var kgPerBag by remember(existing?.id) { mutableStateOf(existing?.kgPerBag?.toString() ?: "75") }
+    var rate by remember(existing?.id) { mutableStateOf(existing?.ratePerQuintal?.toString() ?: "") }
+    var paid by remember(existing?.id) { mutableStateOf(existing?.paidAmount?.toString() ?: "0") }
+    var notes by remember(existing?.id) { mutableStateOf(existing?.notes ?: "") }
+    val bagCount = bags.toIntOrNull() ?: 0
+    val kg = kgPerBag.toDoubleOrNull() ?: 0.0
+    val quintals = bagCount * kg / 100.0
+    val total = quintals * (rate.toDoubleOrNull() ?: 0.0)
+    AlertDialog(onDismissRequest = onDismiss,
+        title = { Text(if (existing == null) "Add paddy record" else "Edit paddy record") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(season, { season = it }, label = { Text("Season (e.g. Kharif 2026)") }, singleLine = true)
+                OutlinedTextField(farmer, { farmer = it }, label = { Text("Farmer / owner name") }, singleLine = true)
+                OutlinedTextField(variety, { variety = it }, label = { Text("Paddy variety (optional)") }, singleLine = true)
+                OutlinedTextField(storage, { storage = it }, label = { Text("Storage / godown location") }, singleLine = true)
+                OutlinedTextField(bags, { bags = it.filter(Char::isDigit) }, label = { Text("Number of bags") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+                OutlinedTextField(kgPerBag, { kgPerBag = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Kg per bag") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Price per quintal (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                OutlinedTextField(paid, { paid = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Amount already paid (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                Text("Calculated: ${number(quintals)} quintals · ${money(total)} total value · ${money((total - (paid.toDoubleOrNull() ?: 0.0)).coerceAtLeast(0.0))} remaining",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(notes, { notes = it }, label = { Text("Notes (optional)") }, minLines = 2)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = season.isNotBlank() && farmer.isNotBlank() && bagCount > 0 && kg > 0.0 &&
+                (rate.toDoubleOrNull() ?: 0.0) >= 0.0 && (paid.toDoubleOrNull() ?: -1.0) >= 0.0,
+                onClick = {
+                    onSave(SeasonPaddyEntity(id = existing?.id ?: 0L, seasonName = season.trim(),
+                        farmerName = farmer.trim(), paddyVariety = variety.trim(), storageLocation = storage.trim(),
+                        bags = bagCount, kgPerBag = kg, ratePerQuintal = rate.toDoubleOrNull() ?: 0.0,
+                        paidAmount = paid.toDoubleOrNull() ?: 0.0, recordedAt = existing?.recordedAt ?: System.currentTimeMillis(),
+                        notes = notes.trim()))
+                }) { Text("Save record") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 @Composable
 private fun MoreScreen(
     modifier: Modifier = Modifier,
@@ -2537,6 +2692,7 @@ private fun MoreScreen(
     val destinations = listOf(
         Triple(AppPage.Calculators, Icons.Filled.Calculate, "Calculators" to "Loan, interest and paddy calculations"),
         Triple(AppPage.Statistics, Icons.Filled.BarChart, "Statistics & reports" to "Portfolio totals, repayment trends and insights"),
+        Triple(AppPage.PaddySeasons, Icons.Filled.BarChart, "Paddy seasons & storage" to "Track farmers, bags, quintals, payments and storage"),
         Triple(AppPage.Backup, Icons.Filled.Settings, "Backup & security" to "Protect, export and restore your records")
     )
     Column(
