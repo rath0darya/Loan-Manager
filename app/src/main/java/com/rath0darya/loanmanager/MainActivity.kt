@@ -2669,7 +2669,7 @@ private fun PaddyRecordDialog(
                 OutlinedTextField(kgPerBag, { kgPerBag = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Kg per bag") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 OutlinedTextField(rate, { rate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Price per quintal (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                 OutlinedTextField(paid, { paid = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Amount already paid (₹)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
-                Text("Calculated: ${number(quintals)} quintals · ${money(total)} total value · ${money((total - (paid.toDoubleOrNull() ?: 0.0)).coerceAtLeast(0.0))} remaining",
+                Text("Calculated: ${paddyNumber(quintals)} quintals · ${money(total)} total value · ${money((total - (paid.toDoubleOrNull() ?: 0.0)).coerceAtLeast(0.0))} remaining",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 OutlinedTextField(notes, { notes = it }, label = { Text("Notes (optional)") }, minLines = 2)
             }
