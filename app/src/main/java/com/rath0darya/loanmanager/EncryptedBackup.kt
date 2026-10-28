@@ -124,10 +124,29 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
             .put("paymentMethod", payment.paymentMethod)
             .put("referenceNumber", payment.referenceNumber))
     }
-    root.put("formatVersion", 2)
+    val paddyArray = JSONArray()
+    dao.allSeasonPaddy().forEach { record ->
+        paddyArray.put(JSONObject()
+            .put("id", record.id)
+            .put("seasonName", record.seasonName)
+            .put("farmerName", record.farmerName)
+            .put("paddyVariety", record.paddyVariety)
+            .put("storageLocation", record.storageLocation)
+            .put("bags", record.bags)
+            .put("kgPerBag", record.kgPerBag)
+            .put("ratePerQuintal", record.ratePerQuintal)
+            .put("paidAmount", record.paidAmount)
+            .put("recordedAt", record.recordedAt)
+            .put("notes", record.notes))
+    }
+    if (loanArray.length() == 0 && paymentArray.length() == 0 && paddyArray.length() == 0) {
+        throw IOException("No saved records found. The previous backup was kept unchanged.")
+    }
+    root.put("formatVersion", 3)
         .put("exportedAt", System.currentTimeMillis())
         .put("loans", loanArray)
         .put("payments", paymentArray)
+        .put("seasonPaddy", paddyArray)
     return root.toString(2)
 }
 
@@ -157,10 +176,15 @@ object DurableBackup {
         val projection = arrayOf(MediaStore.Downloads._ID)
         val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} = ?"
         context.contentResolver.query(collection, projection, selection, arrayOf(BACKUP_NAME, RELATIVE_PATH), null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
+            var first: Uri? = null
+            val duplicates = mutableListOf<Uri>()
+            while (cursor.moveToNext()) {
                 val id = cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID))
-                return Uri.withAppendedPath(collection, id.toString())
+                val item = Uri.withAppendedPath(collection, id.toString())
+                if (first == null) first = item else duplicates.add(item)
             }
+            duplicates.forEach { runCatching { context.contentResolver.delete(it, null, null) } }
+            if (first != null) return first
         }
         return null
     }
@@ -177,7 +201,15 @@ object DurableBackup {
     }
 
     fun writeAutomatic(context: Context, plainText: String): Uri {
-
+        val root = try { JSONObject(plainText) } catch (e: Exception) {
+            throw IOException("Backup data is invalid. The previous backup was kept unchanged.", e)
+        }
+        val loansCount = root.optJSONArray("loans")?.length() ?: 0
+        val paymentsCount = root.optJSONArray("payments")?.length() ?: 0
+        val paddyCount = root.optJSONArray("seasonPaddy")?.length() ?: 0
+        if (loansCount + paymentsCount + paddyCount == 0) {
+            throw IOException("No saved records found. The previous backup was kept unchanged.")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val resolver = context.contentResolver
             val existing = findSharedBackup(context)
@@ -247,8 +279,9 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
         ?: root.optJSONArray("loanRecords")
         ?: throw IOException("Backup is missing its loans list. Choose FundNiti-Backup.lendora or Lendora-Data.json.")
     val paymentArray = root.optJSONArray("payments") ?: root.optJSONArray("repayments") ?: JSONArray()
-    if (loanArray.length() == 0 && paymentArray.length() == 0) {
-        throw IOException("This backup has no loans or repayments. No data was changed.")
+    val paddyArray = root.optJSONArray("seasonPaddy") ?: JSONArray()
+    if (loanArray.length() == 0 && paymentArray.length() == 0 && paddyArray.length() == 0) {
+        throw IOException("This backup has no saved records. No data was changed.")
     }
     for (i in 0 until loanArray.length()) {
         val item = loanArray.optJSONObject(i) ?: throw IOException("Backup loan record " + (i + 1) + " is damaged. No data was changed.")
@@ -262,9 +295,16 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
             throw IOException("Backup payment record " + (i + 1) + " is missing required details. No data was changed.")
         }
     }
+    for (i in 0 until paddyArray.length()) {
+        val item = paddyArray.optJSONObject(i) ?: throw IOException("Paddy record " + (i + 1) + " is damaged. No data was changed.")
+        if (item.optString("seasonName").isBlank() || item.optString("farmerName").isBlank() || item.optInt("bags") < 1) {
+            throw IOException("Paddy record " + (i + 1) + " is missing required details. No data was changed.")
+        }
+    }
     db.withTransaction {
         dao.clearPayments()
         dao.clearLoans()
+        dao.allSeasonPaddy().forEach { dao.deleteSeasonPaddy(it.id) }
         val ids = mutableMapOf<Long, Long>()
         for (i in 0 until loanArray.length()) {
             val o = loanArray.getJSONObject(i)
@@ -293,6 +333,21 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
                 note = o.optString("note", ""),
                 paymentMethod = o.optString("paymentMethod", "Cash"),
                 referenceNumber = o.optString("referenceNumber", "")
+            ))
+        }
+        for (i in 0 until paddyArray.length()) {
+            val o = paddyArray.getJSONObject(i)
+            dao.addSeasonPaddy(SeasonPaddyEntity(
+                seasonName = o.getString("seasonName"),
+                farmerName = o.getString("farmerName"),
+                paddyVariety = o.optString("paddyVariety", ""),
+                storageLocation = o.optString("storageLocation", ""),
+                bags = o.getInt("bags"),
+                kgPerBag = o.optDouble("kgPerBag", 75.0),
+                ratePerQuintal = o.optDouble("ratePerQuintal", 0.0),
+                paidAmount = o.optDouble("paidAmount", 0.0),
+                recordedAt = o.optLong("recordedAt", System.currentTimeMillis()),
+                notes = o.optString("notes", "")
             ))
         }
     }
