@@ -1385,73 +1385,191 @@ private fun PaddyCalculatorCard() {
 }
 
 private fun shareCalculatorResult(context: android.content.Context, title: String, result: String) {
-    val navy = android.graphics.Color.rgb(20, 45, 66)
-    val teal = android.graphics.Color.rgb(18, 107, 85)
-    val gold = android.graphics.Color.rgb(197, 155, 67)
-    val ink = android.graphics.Color.rgb(32, 48, 43)
-    val muted = android.graphics.Color.rgb(91, 111, 102)
-    val pale = android.graphics.Color.rgb(239, 247, 243)
-    val width = 1080; val margin = 64f
+    val navy = android.graphics.Color.rgb(18, 35, 66)
+    val teal = android.graphics.Color.rgb(0, 126, 115)
+    val gold = android.graphics.Color.rgb(224, 177, 83)
+    val ink = android.graphics.Color.rgb(35, 48, 68)
+    val muted = android.graphics.Color.rgb(104, 117, 136)
+    val canvasWhite = android.graphics.Color.WHITE
+    val pale = android.graphics.Color.rgb(244, 248, 252)
     val lines = result.lines().filter { it.isNotBlank() }
-    val height = (300 + lines.size * 90).coerceAtLeast(850)
+    val dataRows = lines.drop(1)
+    val width = 1080
+    val margin = 64f
+    val headerHeight = 300f
+    val rowHeights = dataRows.map { if (it.length > 58) 112f else 88f }
+    val height = (headerHeight + 38f + rowHeights.sum() + 180f).toInt().coerceAtLeast(900)
     val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
     try {
-        val canvas = android.graphics.Canvas(bitmap); canvas.drawColor(android.graphics.Color.WHITE)
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        canvas.drawRect(0f, 0f, width.toFloat(), 220f, p)
-        p.color = gold; canvas.drawRoundRect(42f, 34f, 50f, 178f, 4f, 4f, p)
-        p.color = android.graphics.Color.WHITE; p.textSize = 48f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD; canvas.drawText("FundNiti", 76f, 84f, p)
-        p.textSize = 28f; p.typeface = android.graphics.Typeface.DEFAULT; canvas.drawText(title, 76f, 130f, p)
-        p.textSize = 19f; canvas.drawText("CALCULATION SUMMARY", 76f, 172f, p)
-        var y = 246f
-        lines.forEachIndexed { index, line ->
-            val rowHeight = 66f
-            p.color = if (index % 2 == 0) pale else android.graphics.Color.WHITE
-            canvas.drawRoundRect(margin, y, width - margin, y + rowHeight, 14f, 14f, p)
-            p.color = if (index == 0) teal else ink; p.textSize = if (index == 0) 29f else 25f
-            p.typeface = if (index == 0) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-            val chunks = line.chunked(52)
-            chunks.forEachIndexed { j, chunk -> canvas.drawText(chunk, margin + 20f, y + 39f + j * 29f, p) }
-            y += rowHeight + 8f
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(canvasWhite)
+        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        p.color = navy
+        canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, p)
+        p.color = gold
+        canvas.drawRoundRect(64f, 42f, 76f, 220f, 6f, 6f, p)
+        try {
+            val logo = context.packageManager.getApplicationIcon(context.packageName)
+            logo.setBounds(100, 44, 190, 134)
+            logo.draw(canvas)
+        } catch (_: Exception) {}
+        p.color = canvasWhite
+        p.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+        p.textSize = 54f
+        canvas.drawText("FundNiti", 100f, 180f, p)
+        p.textSize = 32f
+        p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        canvas.drawText(title, 100f, 228f, p)
+        p.color = android.graphics.Color.rgb(193, 211, 231)
+        p.textSize = 21f
+        p.typeface = android.graphics.Typeface.DEFAULT
+        canvas.drawText("PROFESSIONAL CALCULATION SUMMARY", 100f, 268f, p)
+
+        var y = headerHeight + 24f
+        dataRows.forEachIndexed { index, line ->
+            val h = rowHeights[index]
+            val isEmphasis = line.contains("Total amount", true) ||
+                line.contains("Final paddy", true) ||
+                line.contains("Interest amount", true) ||
+                line.contains("Principal + interest", true) ||
+                line.contains("Calculated duration", true)
+            p.color = if (isEmphasis) android.graphics.Color.rgb(231, 246, 241) else if (index % 2 == 0) pale else canvasWhite
+            canvas.drawRoundRect(margin, y, width - margin, y + h - 10f, 22f, 22f, p)
+            p.color = if (isEmphasis) teal else muted
+            p.textSize = 22f
+            p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            val separator = line.indexOf(":")
+            val label = if (separator > 0) line.substring(0, separator).trim() else line
+            val value = if (separator > 0) line.substring(separator + 1).trim() else ""
+            canvas.drawText(label.take(70), margin + 26f, y + 34f, p)
+            p.color = if (isEmphasis) navy else ink
+            p.textSize = if (isEmphasis) 32f else 27f
+            p.typeface = if (isEmphasis) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            val valueText = if (value.isBlank()) "" else value
+            val maxChars = 54
+            if (valueText.isNotBlank()) {
+                val chunks = valueText.chunked(maxChars)
+                chunks.take(2).forEachIndexed { j, chunk ->
+                    canvas.drawText(chunk, margin + 26f, y + 68f + j * 30f, p)
+                }
+            }
+            y += h
         }
-        p.color = navy; canvas.drawRect(0f, height - 70f, width.toFloat(), height.toFloat(), p)
-        p.color = android.graphics.Color.WHITE; p.textSize = 18f; p.typeface = android.graphics.Typeface.DEFAULT
-        canvas.drawText("For reference only · No saved loan records changed", margin, height - 38f, p)
+        val footerTop = height - 132f
+        p.color = navy
+        canvas.drawRoundRect(38f, footerTop, width - 38f, height - 28f, 24f, 24f, p)
+        p.color = gold
+        canvas.drawRoundRect(64f, footerTop + 24f, 72f, height - 52f, 4f, 4f, p)
+        p.color = canvasWhite
+        p.textSize = 22f
+        p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        canvas.drawText("FundNiti  •  Personal finance, clearly organised", 94f, footerTop + 45f, p)
+        p.textSize = 18f
+        p.typeface = android.graphics.Typeface.DEFAULT
+        canvas.drawText("For reference only  •  Please verify figures before use", 94f, footerTop + 78f, p)
         val directory = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
         val file = java.io.File(directory, "FundNiti-Calculator-Result.png")
         java.io.FileOutputStream(file).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
         shareCalculatorFile(context, title, file, false)
-    } catch (e: Exception) { Toast.makeText(context, "Could not share calculation: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show() }
-    finally { bitmap.recycle() }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Could not share calculation: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show()
+    } finally {
+        bitmap.recycle()
+    }
 }
 
 private fun shareCalculatorResultPdf(context: android.content.Context, title: String, result: String) {
-    val navy = android.graphics.Color.rgb(20, 45, 66); val teal = android.graphics.Color.rgb(18, 107, 85)
-    val ink = android.graphics.Color.rgb(32, 48, 43); val muted = android.graphics.Color.rgb(91, 111, 102)
-    val pale = android.graphics.Color.rgb(239, 247, 243)
-    val lines = result.lines().filter { it.isNotBlank() }
+    val navy = android.graphics.Color.rgb(18, 35, 66)
+    val teal = android.graphics.Color.rgb(0, 126, 115)
+    val gold = android.graphics.Color.rgb(224, 177, 83)
+    val ink = android.graphics.Color.rgb(35, 48, 68)
+    val muted = android.graphics.Color.rgb(104, 117, 136)
+    val pale = android.graphics.Color.rgb(244, 248, 252)
+    val rows = result.lines().filter { it.isNotBlank() }.drop(1)
     val directory = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
     val file = java.io.File(directory, "FundNiti-Calculator-Result.pdf")
     val doc = android.graphics.pdf.PdfDocument()
     try {
-        val pageWidth = 595; val pageHeight = 842
-        val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create())
-        val canvas = page.canvas; canvas.drawColor(android.graphics.Color.WHITE)
-        val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }; canvas.drawRect(0f, 0f, pageWidth.toFloat(), 140f, p)
-        p.color = android.graphics.Color.WHITE; p.textSize = 27f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD; canvas.drawText("FundNiti", 38f, 55f, p)
-        p.textSize = 15f; p.typeface = android.graphics.Typeface.DEFAULT; canvas.drawText(title, 38f, 86f, p); p.textSize = 10f; canvas.drawText("CALCULATION SUMMARY", 38f, 112f, p)
-        var y = 164f
-        lines.forEachIndexed { index, line ->
-            p.textSize = 12f; p.typeface = if (index == 0) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
-            val chunks = line.chunked(62); val h = maxOf(38f, chunks.size * 18f + 16f)
-            p.color = if (index % 2 == 0) pale else android.graphics.Color.WHITE; canvas.drawRoundRect(28f, y, pageWidth - 28f, y + h, 7f, 7f, p)
-            p.color = if (index == 0) teal else ink; chunks.forEachIndexed { j, chunk -> canvas.drawText(chunk, 40f, y + 24f + j * 18f, p) }; y += h + 8f
-        }
-        p.color = muted; p.textSize = 9f; canvas.drawText("For reference only · No saved loan records changed", 30f, pageHeight - 24f, p)
-        doc.finishPage(page); java.io.FileOutputStream(file).use { doc.writeTo(it) }
+        val pageWidth = 595
+        val pageHeight = 842
+        val margin = 32f
+        var index = 0
+        var pageNo = 1
+        do {
+            val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNo).create())
+            val canvas = page.canvas
+            canvas.drawColor(android.graphics.Color.WHITE)
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            p.color = navy
+            canvas.drawRoundRect(18f, 18f, pageWidth - 18f, 132f, 14f, 14f, p)
+            p.color = gold
+            canvas.drawRoundRect(34f, 34f, 39f, 112f, 3f, 3f, p)
+            try {
+                val drawable = context.packageManager.getApplicationIcon(context.packageName)
+                val logo = android.graphics.Bitmap.createBitmap(36, 36, android.graphics.Bitmap.Config.ARGB_8888)
+                val logoCanvas = android.graphics.Canvas(logo)
+                drawable.setBounds(0, 0, 36, 36)
+                drawable.draw(logoCanvas)
+                canvas.drawBitmap(logo, 52f, 31f, p)
+                logo.recycle()
+            } catch (_: Exception) {}
+            p.color = android.graphics.Color.WHITE
+            p.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            p.textSize = 23f
+            canvas.drawText("FundNiti", 96f, 53f, p)
+            p.textSize = 14f
+            p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            canvas.drawText(title.take(48), 52f, 84f, p)
+            p.color = android.graphics.Color.rgb(202, 218, 237)
+            p.textSize = 8.5f
+            canvas.drawText("PROFESSIONAL CALCULATION SUMMARY", 52f, 108f, p)
+
+            var y = 148f
+            val maxY = pageHeight - 62f
+            while (index < rows.size) {
+                val line = rows[index]
+                val colon = line.indexOf(":")
+                val label = if (colon > 0) line.substring(0, colon).trim() else line
+                val value = if (colon > 0) line.substring(colon + 1).trim() else ""
+                val chunks = value.chunked(52).ifEmpty { listOf("") }
+                val cardHeight = maxOf(42f, 23f + chunks.size * 14f)
+                if (y + cardHeight > maxY) break
+                val emphasized = line.contains("Total amount", true) ||
+                    line.contains("Final paddy", true) ||
+                    line.contains("Interest amount", true) ||
+                    line.contains("Principal + interest", true)
+                p.color = if (emphasized) android.graphics.Color.rgb(231, 246, 241) else if (index % 2 == 0) pale else android.graphics.Color.WHITE
+                canvas.drawRoundRect(margin, y, pageWidth - margin, y + cardHeight - 4f, 8f, 8f, p)
+                p.color = if (emphasized) teal else muted
+                p.textSize = 8.5f
+                p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                canvas.drawText(label.take(72), margin + 12f, y + 14f, p)
+                p.color = if (emphasized) navy else ink
+                p.textSize = if (emphasized) 12.5f else 10.5f
+                p.typeface = if (emphasized) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                chunks.take(3).forEachIndexed { j, chunk -> canvas.drawText(chunk, margin + 12f, y + 30f + j * 13f, p) }
+                y += cardHeight + 5f
+                index++
+            }
+            p.color = navy
+            canvas.drawRoundRect(18f, pageHeight - 49f, pageWidth - 18f, pageHeight - 16f, 8f, 8f, p)
+            p.color = android.graphics.Color.WHITE
+            p.textSize = 8f
+            p.typeface = android.graphics.Typeface.DEFAULT
+            canvas.drawText("FundNiti  •  Verify figures before use", 30f, pageHeight - 29f, p)
+            p.textAlign = android.graphics.Paint.Align.RIGHT
+            canvas.drawText("Page $pageNo", pageWidth - 30f, pageHeight - 29f, p)
+            p.textAlign = android.graphics.Paint.Align.LEFT
+            doc.finishPage(page)
+            pageNo++
+        } while (index < rows.size)
+        java.io.FileOutputStream(file).use { doc.writeTo(it) }
         shareCalculatorFile(context, title, file, true)
-    } catch (e: Exception) { Toast.makeText(context, "Could not create calculator PDF: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show() }
-    finally { doc.close() }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Could not create calculator PDF: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show()
+    } finally {
+        doc.close()
+    }
 }
 
 private fun shareCalculatorFile(context: android.content.Context, title: String, file: java.io.File, asPdf: Boolean) {
