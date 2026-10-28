@@ -656,15 +656,17 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
         if (payment.note.isNotBlank()) summaryRows.add(LoanReportLine("Note", payment.note))
     }
     val rows = if (asPdf) fullRows else summaryRows
-    val navy = android.graphics.Color.rgb(24, 43, 85)
-    val teal = android.graphics.Color.rgb(0, 137, 123)
-    val ink = android.graphics.Color.rgb(35, 45, 62)
-    val muted = android.graphics.Color.rgb(95, 108, 126)
-    val pale = android.graphics.Color.rgb(240, 246, 252)
+    val navy = android.graphics.Color.rgb(18, 35, 66)
+    val teal = android.graphics.Color.rgb(0, 126, 115)
+    val gold = android.graphics.Color.rgb(224, 177, 83)
+    val ink = android.graphics.Color.rgb(35, 48, 68)
+    val muted = android.graphics.Color.rgb(104, 117, 136)
+    val pale = android.graphics.Color.rgb(244, 248, 252)
+    val highlight = android.graphics.Color.rgb(231, 246, 241)
     val width = 1080
     val left = 64f
     val right = width - 64f
-    val headerHeight = 250f
+    val headerHeight = 286f
     val heights = rows.map { if (it.section) 62f else 82f }
     val imageHeight = (headerHeight + heights.sum() + 150f).toInt().coerceAtLeast(1000)
     val bitmap = android.graphics.Bitmap.createBitmap(width, imageHeight, android.graphics.Bitmap.Config.ARGB_8888)
@@ -674,20 +676,27 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
         canvas.drawColor(android.graphics.Color.WHITE)
         paint.color = navy
         canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, paint)
+        paint.color = gold
+        canvas.drawRoundRect(42f, 40f, 54f, 212f, 6f, 6f, paint)
         try {
             val logo = context.packageManager.getApplicationIcon(context.packageName)
-            logo.setBounds(64, 48, 164, 148)
+            logo.setBounds(82, 48, 172, 138)
             logo.draw(canvas)
         } catch (_: Exception) {}
         paint.color = android.graphics.Color.WHITE
         paint.textSize = 48f
         paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-        canvas.drawText("FundNiti", 190f, 102f, paint)
+        canvas.drawText("FundNiti", 194f, 102f, paint)
         paint.textSize = 28f
-        canvas.drawText("FULL LOAN REPORT", 190f, 145f, paint)
+        canvas.drawText("LOAN ACCOUNT STATEMENT", 194f, 145f, paint)
         paint.textSize = 23f
         paint.typeface = android.graphics.Typeface.DEFAULT
-        canvas.drawText("Personal lending, clearly organised", 64f, 205f, paint)
+        paint.color = android.graphics.Color.rgb(202, 218, 237)
+        paint.textSize = 22f
+        canvas.drawText("PREMIUM FINANCIAL SUMMARY", 82f, 190f, paint)
+        paint.color = android.graphics.Color.WHITE
+        paint.textSize = 23f
+        canvas.drawText("Personal lending, clearly organised", 82f, 238f, paint)
         var y = headerHeight + 24f
         rows.forEachIndexed { index, row ->
             val h = heights[index]
@@ -699,29 +708,30 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                 paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
                 canvas.drawText(row.label, left + 20f, y + 38f, paint)
             } else {
-                paint.color = if (index % 2 == 0) pale else android.graphics.Color.WHITE
-                canvas.drawRoundRect(left, y, right, y + h - 6f, 12f, 12f, paint)
-                paint.color = muted
+                val keyRow = row.label.contains("outstanding", true) || row.label.contains("total paid", true) || row.label.contains("principal", true) || row.label.contains("balance", true)
+                paint.color = if (keyRow) highlight else if (index % 2 == 0) pale else android.graphics.Color.WHITE
+                canvas.drawRoundRect(left, y, right, y + h - 6f, 18f, 18f, paint)
+                paint.color = if (keyRow) teal else muted
                 paint.textSize = 22f
                 paint.typeface = android.graphics.Typeface.DEFAULT
                 canvas.drawText(row.label.take(58), left + 18f, y + 29f, paint)
                 paint.color = ink
-                paint.textSize = 27f
-                paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                paint.textSize = if (keyRow) 29f else 27f
+                paint.typeface = if (keyRow) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                 canvas.drawText(row.value, left + 18f, y + 59f, paint)
             }
             y += h
         }
         val footer = (y + 15f).coerceAtMost(imageHeight - 120f)
         paint.color = navy
-        canvas.drawRect(0f, footer, width.toFloat(), imageHeight.toFloat(), paint)
+        canvas.drawRoundRect(38f, footer, width - 38f, imageHeight - 20f, 22f, 22f, paint)
         paint.color = android.graphics.Color.WHITE
         paint.textSize = 23f
         paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-        canvas.drawText("FundNiti • Personal lending, clearly organised", left, footer + 42f, paint)
+        canvas.drawText("FundNiti  •  PERSONAL FINANCE", left + 18f, footer + 42f, paint)
         paint.textSize = 19f
         paint.typeface = android.graphics.Typeface.DEFAULT
-        canvas.drawText("For reference only • Verify details before sharing", left, footer + 78f, paint)
+        canvas.drawText("For reference only  •  Verify details before sharing", left + 18f, footer + 78f, paint)
 
         val dir = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
         val file = java.io.File(dir, if (asPdf) "FundNiti-Loan-Report.pdf" else "FundNiti-Loan-Report.png")
@@ -737,8 +747,11 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                 val pc = page.canvas
                 pc.drawColor(android.graphics.Color.WHITE)
                 val hp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-                pc.drawRect(0f, 0f, pageW.toFloat(), headerHeight * scale, hp)
+                pc.drawRoundRect(18f, 18f, pageW - 18f, headerHeight * scale, 14f, 14f, hp)
                 val title = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 25f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+                title.color = gold
+                pc.drawRoundRect(32f, 30f, 36f, 112f, 2f, 2f, title)
+                title.color = android.graphics.Color.WHITE
                 try {
                     val drawable = context.packageManager.getApplicationIcon(context.packageName)
                     val logo = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
@@ -750,7 +763,11 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                 } catch (_: Exception) {}
                 pc.drawText("FundNiti", 90f, 42f, title)
                 title.textSize = 14f
-                pc.drawText("FULL LOAN REPORT", 90f, 64f, title)
+                pc.drawText("LOAN ACCOUNT STATEMENT", 90f, 64f, title)
+                title.textSize = 9f
+                title.color = android.graphics.Color.rgb(202, 218, 237)
+                pc.drawText("PREMIUM FINANCIAL SUMMARY", 90f, 83f, title)
+                title.color = android.graphics.Color.WHITE
                 val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
                 var py = headerHeight * scale + 18f
                 val maxY = pageH - 45f
@@ -763,18 +780,25 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
                         p.color = android.graphics.Color.WHITE; p.textSize = 12f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD
                         pc.drawText(row.label.take(65), 40f, py + rh / 2f + 4f, p)
                     } else {
-                        p.color = if (rowIndex % 2 == 0) pale else android.graphics.Color.WHITE
-                        pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 5f, 5f, p)
-                        p.color = muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.DEFAULT
+                        val keyRow = row.label.contains("outstanding", true) || row.label.contains("total paid", true) || row.label.contains("principal", true) || row.label.contains("balance", true)
+                        p.color = if (keyRow) highlight else if (rowIndex % 2 == 0) pale else android.graphics.Color.WHITE
+                        pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 7f, 7f, p)
+                        p.color = if (keyRow) teal else muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.DEFAULT
                         pc.drawText(row.label.take(34), 40f, py + 14f, p)
-                        p.color = ink; p.textSize = 11f; p.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                        p.color = ink; p.textSize = if (keyRow) 12f else 11f; p.typeface = if (keyRow) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
                         pc.drawText(row.value.take(66), 40f, py + 29f, p)
                     }
                     py += rh
                     rowIndex++
                 }
                 val foot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy; textSize = 9f }
-                pc.drawText("FundNiti • For reference only • Page $pageNo", 32f, pageH - 18f, foot)
+                foot.color = navy
+                pc.drawRoundRect(18f, pageH - 42f, pageW - 18f, pageH - 12f, 7f, 7f, foot)
+                foot.color = android.graphics.Color.WHITE
+                pc.drawText("FundNiti  •  Verify details before use", 30f, pageH - 23f, foot)
+                foot.textAlign = android.graphics.Paint.Align.RIGHT
+                pc.drawText("Page $pageNo", pageW - 30f, pageH - 23f, foot)
+                foot.textAlign = android.graphics.Paint.Align.LEFT
                 doc.finishPage(page)
                 pageNo++
             } while (rowIndex < rows.size)
