@@ -268,7 +268,7 @@ private fun LoanManagerApp() {
                 }
                 restoreBackupJson(db, dao, text)
                 withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
-                backupStatus = "Restored ${dao.allLoans().size} loans and ${dao.allPayments().size} repayments. Device backup refreshed."
+                backupStatus = "Restored ${dao.allLoans().size} loans, ${dao.allPayments().size} repayments and ${dao.allSeasonPaddy().size} paddy records. Device backup refreshed."
                 snackbarHostState.showSnackbar("Backup restored and Android folder copy refreshed")
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Restore failed: ${e.localizedMessage ?: "invalid backup"}")
@@ -282,7 +282,8 @@ private fun LoanManagerApp() {
             backupStatus = withContext(Dispatchers.IO) {
                 val existingLoans = dao.allLoans()
                 val existingPayments = dao.allPayments()
-                val status = if (existingLoans.isEmpty() && existingPayments.isEmpty()) {
+                val existingPaddy = dao.allSeasonPaddy()
+                val status = if (existingLoans.isEmpty() && existingPayments.isEmpty() && existingPaddy.isEmpty()) {
                     val saved = DurableBackup.readAutomatic(context)
                     if (saved != null) {
                         restoreBackupJson(db, dao, saved)
@@ -291,9 +292,9 @@ private fun LoanManagerApp() {
                         "No existing Android folder backup was found yet."
                     }
                 } else {
-                    "Found ${existingLoans.size} local loans and ${existingPayments.size} repayments."
+                    "Found ${existingLoans.size} loans, ${existingPayments.size} repayments and ${existingPaddy.size} paddy records on this device."
                 }
-                if (existingLoans.isNotEmpty() || existingPayments.isNotEmpty() || dao.allSeasonPaddy().isNotEmpty()) {
+                if (existingLoans.isNotEmpty() || existingPayments.isNotEmpty() || existingPaddy.isNotEmpty()) {
                     DurableBackup.writeAutomatic(context, createBackupJson(dao))
                 }
                 status
@@ -439,9 +440,9 @@ private fun LoanManagerApp() {
                                     val json = createBackupJson(dao)
                                     val file = DurableBackup.writeAutomatic(context, json)
                                     val root = JSONObject(json)
-                                    Triple(file.toString(), root.getJSONArray("loans").length(), root.getJSONArray("payments").length())
+                                    Triple(file.toString(), root.getJSONArray("loans").length(), root.getJSONArray("payments").length() + (root.optJSONArray("seasonPaddy")?.length() ?: 0))
                                 }
-                                backupStatus = "Saved ${result.second} loans and ${result.third} repayments. File: ${result.first}"
+                                backupStatus = "Backup refreshed with ${result.second} loans and ${result.third} repayments + paddy records. File: ${result.first}"
                                 snackbarHostState.showSnackbar("All data backed up to the Android folder")
                             } catch (e: Exception) {
                                 backupStatus = "Backup failed: ${e.localizedMessage ?: "storage unavailable"}"
@@ -455,8 +456,9 @@ private fun LoanManagerApp() {
                                 backupStatus = withContext(Dispatchers.IO) {
                                     val existingLoans = dao.allLoans()
                                     val existingPayments = dao.allPayments()
-                                    if (existingLoans.isNotEmpty() || existingPayments.isNotEmpty()) {
-                                        "Recovery skipped: this app already has ${existingLoans.size} loans and ${existingPayments.size} repayments. Current records were not replaced."
+                                    val existingPaddy = dao.allSeasonPaddy()
+                                    if (existingLoans.isNotEmpty() || existingPayments.isNotEmpty() || existingPaddy.isNotEmpty()) {
+                                        "Recovery skipped: this app already has ${existingLoans.size} loans, ${existingPayments.size} repayments and ${existingPaddy.size} paddy records. Current records were not replaced."
                                     } else {
                                         val saved = DurableBackup.readAutomatic(context)
                                             ?: error("No Android folder backup was found")
