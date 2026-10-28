@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
@@ -156,7 +158,8 @@ private enum class AppPage(val label: String, val icon: ImageVector) {
     People("People", Icons.Filled.People),
     Calculators("Calculators", Icons.Filled.Calculate),
     Statistics("Stats", Icons.Filled.BarChart),
-    Backup("Backup", Icons.Filled.Settings)
+    Backup("Backup", Icons.Filled.Settings),
+    More("More", Icons.Filled.Apps)
 }
 
 class MainActivity : androidx.fragment.app.FragmentActivity() {
@@ -356,9 +359,9 @@ private fun LoanManagerApp() {
             bottomBar = {
                 Column {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                        AppPage.entries.forEach { item ->
+                        listOf(AppPage.Home, AppPage.Loans, AppPage.People, AppPage.More).forEach { item ->
                             NavigationBarItem(
-                                selected = page == item,
+                                selected = if (item == AppPage.More) page in listOf(AppPage.More, AppPage.Calculators, AppPage.Statistics, AppPage.Backup) else page == item,
                                 onClick = { page = item },
                                 icon = { Icon(item.icon, contentDescription = item.label) },
                                 label = { Text(item.label) }
@@ -370,10 +373,12 @@ private fun LoanManagerApp() {
             },
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
             floatingActionButton = {
-                if (page == AppPage.Loans) {
-                    FloatingActionButton(onClick = { showAddLoan = true }) {
-                        Icon(Icons.Filled.Add, contentDescription = "Add loan")
-                    }
+                FloatingActionButton(
+                    onClick = { showAddLoan = true },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add a new loan")
                 }
             }
         ) { padding ->
@@ -391,6 +396,10 @@ private fun LoanManagerApp() {
                 AppPage.Calculators -> CalculatorsScreen(Modifier.padding(padding))
                 AppPage.Statistics -> StatisticsScreen(
                     Modifier.padding(padding), loans, payments, ::balance, totalOutstanding, totalPrincipal
+                )
+                AppPage.More -> MoreScreen(
+                    modifier = Modifier.padding(padding),
+                    onNavigate = { destination -> page = destination }
                 )
                 AppPage.Backup -> BackupScreen(
                     Modifier.padding(padding),
@@ -2515,6 +2524,65 @@ private fun EmptyState(title: String, message: String) {
             Spacer(Modifier.height(8.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+
+@Composable
+private fun MoreScreen(
+    modifier: Modifier = Modifier,
+    onNavigate: (AppPage) -> Unit
+) {
+    val destinations = listOf(
+        Triple(AppPage.Calculators, Icons.Filled.Calculate, "Calculators" to "Loan, interest and paddy calculations"),
+        Triple(AppPage.Statistics, Icons.Filled.BarChart, "Statistics & reports" to "Portfolio totals, repayment trends and insights"),
+        Triple(AppPage.Backup, Icons.Filled.Settings, "Backup & security" to "Protect, export and restore your records")
+    )
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("More tools", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Calculations, insights and data protection in one place.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        destinations.forEach { destination ->
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onNavigate(destination.first) },
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Icon(
+                            destination.second,
+                            contentDescription = null,
+                            modifier = Modifier.padding(12.dp).size(26.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(destination.third.first, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(destination.third.second, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(
+                        androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Open ${destination.third.first}",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
     }
 }
