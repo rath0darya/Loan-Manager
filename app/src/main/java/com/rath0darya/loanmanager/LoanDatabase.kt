@@ -42,7 +42,7 @@ data class SeasonPaddyEntity(
     val ratePerQuintal: Double,
     val paidAmount: Double,
     val recordedAt: Long,
-    val notes: String = ""
+    @ColumnInfo(defaultValue = "''") val notes: String = ""
 )
 
 @Entity(tableName = "payments", indices = [Index("loanId")])
