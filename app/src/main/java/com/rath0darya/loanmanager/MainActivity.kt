@@ -2576,10 +2576,10 @@ private fun MoreScreen(
                         Text(destination.third.first, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(destination.third.second, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Icon(
-                        androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Open ${destination.third.first}",
-                        tint = MaterialTheme.colorScheme.primary
+                    Text(
+                        "›",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
