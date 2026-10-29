@@ -46,7 +46,7 @@ jobs:
       - name: Prepare versioned APK
         id: release
         run: |
-          version_name="$(sed -n 's/.*versionName = "\\([^"]*\\)".*/\\1/p' app/build.gradle.kts | head -n 1)"
+          version_name="$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | cut -d '"' -f 2 | head -n 1)"
           short_sha="${GITHUB_SHA::7}"
           apk_name="FundNiti-${version_name}-${short_sha}.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk_name"
