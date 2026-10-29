@@ -147,8 +147,14 @@ internal suspend fun createBackupJson(dao: LoanDao): String {
         .put("loans", loanArray)
         .put("payments", paymentArray)
         .put("seasonPaddy", paddyArray)
+    root.put("integrityChecksum", backupChecksum(root.toString()))
     return root.toString(2)
 }
+
+private fun backupChecksum(payload: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(payload.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 
 
 /**
@@ -274,6 +280,17 @@ internal suspend fun restoreBackupJson(db: LoanDatabase, dao: LoanDao, text: Str
     } catch (e: Exception) {
         throw IOException("This file is not a readable FundNiti backup. Choose the exported .lendora backup or the Lendora-Data.json device backup.", e)
     }
+    val expectedChecksum = root.optString("integrityChecksum", "")
+    if (expectedChecksum.isNotBlank()) {
+        root.remove("integrityChecksum")
+        val actualChecksum = backupChecksum(root.toString())
+        val matches = java.security.MessageDigest.isEqual(
+            expectedChecksum.toByteArray(Charsets.US_ASCII),
+            actualChecksum.toByteArray(Charsets.US_ASCII)
+        )
+        if (!matches) throw IOException("Backup integrity check failed. The file may be incomplete or changed; no data was changed.")
+    }
+    // Backups created before checksums remain importable.
     // Accept both current portable JSON and older backup field names.
     val loanArray = root.optJSONArray("loans")
         ?: root.optJSONArray("loanRecords")
