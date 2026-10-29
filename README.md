@@ -80,7 +80,7 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 
 - **App name:** FundNiti
 - **Application ID:** `com.fundniti`
-- **Current version:** `1.1.0`
+- **Current version:** `1.2.0`
 - **Data storage:** On-device Room database
 - **Upgrade note:** `com.fundniti` installs as a separate Android app from earlier `com.rath0darya.loanmanager` builds. Keep the automatic `Lendora-Data.json` snapshot and restore it in the new app; encrypted `.lendora` exports are tied to the installation key.
 - **Network backend:** None required

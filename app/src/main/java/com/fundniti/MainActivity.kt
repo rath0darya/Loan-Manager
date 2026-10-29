@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -685,6 +686,7 @@ private data class LoanReportLine(val label: String, val value: String, val sect
 private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double): List<LoanReportLine> {
     val now = System.currentTimeMillis()
     val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, now)
+    val grossTotal = loan.principal + interest
     val paid = payments.sumOf { it.amount }
     val start = Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
     val today = LocalDate.now()
@@ -693,27 +695,27 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
     val months = period.years * 12 + period.months
     val rows = mutableListOf(
         LoanReportLine("People", listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ").ifBlank { "Not specified" }),
-        LoanReportLine("Loan direction", when (loan.direction) { "LENT" -> "You gave money to someone"; "BORROWED_FOR_OTHER" -> "Borrowed from one person for another"; else -> "Borrowed for yourself" }),
-        LoanReportLine("Loan details", "", true),
+        LoanReportLine("Loan direction", when (loan.direction) { "LENT" -> "You lent money"; "BORROWED_FOR_OTHER" -> "Borrowed for someone else"; else -> "You borrowed money" }),
+        LoanReportLine("LOAN BREAKDOWN", "", true),
         LoanReportLine("Loan date", formatDate(loan.startDate)),
         LoanReportLine("Duration", "$months months, ${period.days} days (${ChronoUnit.DAYS.between(start, end)} days total)"),
         LoanReportLine("Principal amount", money(loan.principal)),
         LoanReportLine("Interest rate", "${loan.monthlyRate}% per month"),
-        LoanReportLine("Interest till now", money(interest)),
-        LoanReportLine("Payments made", money(paid)),
+        LoanReportLine("Accrued interest", money(interest)),
+        LoanReportLine("Total amount (principal + interest)", money(grossTotal)),
+        LoanReportLine("Payments recorded", money(paid)),
         LoanReportLine("Amount still due", money(outstanding)),
         LoanReportLine("Status", if (outstanding <= 0.009) "Fully paid" else "Still to be paid")
     )
     loan.dueDate?.let { rows.add(LoanReportLine("Reminder date", formatDate(it))) }
     if (loan.note.isNotBlank()) rows.add(LoanReportLine("Loan notes", loan.note))
-    rows.add(LoanReportLine("Payment history (${payments.size})", "", true))
+    rows.add(LoanReportLine("PAYMENT HISTORY  ·  ${payments.size} records", "", true))
     if (payments.isEmpty()) rows.add(LoanReportLine("Payments", "No payments recorded"))
     payments.forEachIndexed { index, payment ->
-        rows.add(LoanReportLine("Payment ${index + 1}: ${money(payment.amount)}", "", true))
-        rows.add(LoanReportLine("Date", formatDate(payment.paidAt)))
-        rows.add(LoanReportLine("Time", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(payment.paidAt))))
+        rows.add(LoanReportLine("Payment ${index + 1}  ·  ${money(payment.amount)}", "", true))
+        rows.add(LoanReportLine("Date and time", formatDate(payment.paidAt) + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(payment.paidAt))))
         rows.add(LoanReportLine("Method", payment.paymentMethod))
-        if (payment.referenceNumber.isNotBlank()) rows.add(LoanReportLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction number", payment.referenceNumber))
+        if (payment.referenceNumber.isNotBlank()) rows.add(LoanReportLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction reference", payment.referenceNumber))
         if (payment.note.isNotBlank()) rows.add(LoanReportLine("Payment notes", payment.note))
     }
     return rows.flatMap { row ->
@@ -725,161 +727,198 @@ private fun loanReportLines(loan: LoanEntity, payments: List<PaymentEntity>, out
 }
 
 private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, payments: List<PaymentEntity>, outstanding: Double, asPdf: Boolean) {
-    val fullRows = loanReportLines(loan, payments, outstanding)
-    val summaryRows = loanReportLines(loan, emptyList(), outstanding).filterNot { it.label.startsWith("Payment history") }.toMutableList()
-    summaryRows.add(LoanReportLine("Recent payments (" + payments.size + " total)", "", true))
-    if (payments.isEmpty()) summaryRows.add(LoanReportLine("Payments", "No payments recorded"))
+    val allRows = loanReportLines(loan, payments, outstanding)
+    val imageRows = loanReportLines(loan, emptyList(), outstanding)
+        .filterNot { it.label.startsWith("PAYMENT HISTORY") }
+        .toMutableList()
+    imageRows.add(LoanReportLine("RECENT PAYMENTS  ·  ${payments.size} total", "", true))
+    if (payments.isEmpty()) imageRows.add(LoanReportLine("Payments", "No payments recorded"))
     payments.takeLast(5).forEachIndexed { index, payment ->
-        summaryRows.add(LoanReportLine("Payment " + (payments.size - minOf(5, payments.size) + index + 1), money(payment.amount), true))
-        summaryRows.add(LoanReportLine("Date & time", formatDate(payment.paidAt) + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(payment.paidAt))))
-        summaryRows.add(LoanReportLine("Method", payment.paymentMethod))
-        if (payment.referenceNumber.isNotBlank()) summaryRows.add(LoanReportLine("Reference", payment.referenceNumber))
-        if (payment.note.isNotBlank()) summaryRows.add(LoanReportLine("Note", payment.note))
+        val paymentNumber = payments.size - minOf(5, payments.size) + index + 1
+        imageRows.add(LoanReportLine("Payment $paymentNumber  ·  ${money(payment.amount)}", "", true))
+        imageRows.add(LoanReportLine("Date and method", "${formatDate(payment.paidAt)} · ${payment.paymentMethod}"))
+        if (payment.referenceNumber.isNotBlank()) imageRows.add(LoanReportLine("Reference", payment.referenceNumber))
     }
-    val rows = if (asPdf) fullRows else summaryRows
-    val navy = android.graphics.Color.rgb(18, 35, 66)
-    val teal = android.graphics.Color.rgb(0, 126, 115)
-    val gold = android.graphics.Color.rgb(224, 177, 83)
-    val ink = android.graphics.Color.rgb(35, 48, 68)
-    val muted = android.graphics.Color.rgb(104, 117, 136)
-    val pale = android.graphics.Color.rgb(244, 248, 252)
-    val highlight = android.graphics.Color.rgb(231, 246, 241)
-    val width = 1080
-    val left = 64f
-    val right = width - 64f
-    val headerHeight = 286f
-    val heights = rows.map { if (it.section) 62f else 82f }
-    val imageHeight = (headerHeight + heights.sum() + 150f).toInt().coerceAtLeast(1000)
+    val rows = if (asPdf) allRows else imageRows
+    val deepGreen = android.graphics.Color.rgb(8, 62, 47)
+    val emerald = android.graphics.Color.rgb(8, 121, 90)
+    val mint = android.graphics.Color.rgb(225, 244, 234)
+    val gold = android.graphics.Color.rgb(234, 196, 111)
+    val ink = android.graphics.Color.rgb(26, 44, 36)
+    val muted = android.graphics.Color.rgb(91, 109, 98)
+    val paper = android.graphics.Color.rgb(246, 249, 246)
+    val white = android.graphics.Color.WHITE
+    val width = 1200
+    val headerHeight = 250f
+    val summaryHeight = 250f
+    val left = 52f
+    val right = width - 52f
+    val rowHeights = rows.map { if (it.section) 70f else 78f }
+    val rowHeight = rowHeights.sum()
+    val imageHeight = (headerHeight + summaryHeight + rowHeight + 150f).toInt().coerceAtLeast(1000)
     val bitmap = android.graphics.Bitmap.createBitmap(width, imageHeight, android.graphics.Bitmap.Config.ARGB_8888)
-    try {
-        val canvas = android.graphics.Canvas(bitmap)
-        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        canvas.drawColor(android.graphics.Color.WHITE)
-        paint.color = navy
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
+    val grossTotal = loan.principal + interest
+
+    fun drawHeader(canvas: android.graphics.Canvas, compact: Boolean = false) {
+        paint.shader = android.graphics.LinearGradient(0f, 0f, width.toFloat(), headerHeight,
+            intArrayOf(deepGreen, emerald), null, android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRect(0f, 0f, width.toFloat(), headerHeight, paint)
+        paint.shader = null
         paint.color = gold
-        canvas.drawRoundRect(42f, 40f, 54f, 212f, 6f, 6f, paint)
+        canvas.drawRoundRect(48f, 44f, 58f, 202f, 5f, 5f, paint)
         try {
             val logo = context.packageManager.getApplicationIcon(context.packageName)
-            logo.setBounds(82, 48, 172, 138)
+            logo.setBounds(82, 46, 172, 136)
             logo.draw(canvas)
         } catch (_: Exception) {}
-        paint.color = android.graphics.Color.WHITE
-        paint.textSize = 48f
+        paint.color = white
         paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-        canvas.drawText("FundNiti", 194f, 102f, paint)
-        paint.textSize = 28f
-        canvas.drawText("LOAN ACCOUNT STATEMENT", 194f, 145f, paint)
-        paint.textSize = 23f
+        paint.textSize = 52f
+        canvas.drawText("FundNiti", 194f, 96f, paint)
+        paint.textSize = 24f
+        paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        canvas.drawText("LOAN ACCOUNT STATEMENT", 194f, 137f, paint)
+        paint.color = android.graphics.Color.rgb(210, 233, 220)
+        paint.textSize = 20f
         paint.typeface = android.graphics.Typeface.DEFAULT
-        paint.color = android.graphics.Color.rgb(202, 218, 237)
-        paint.textSize = 22f
-        canvas.drawText("PREMIUM FINANCIAL SUMMARY", 82f, 190f, paint)
-        paint.color = android.graphics.Color.WHITE
-        paint.textSize = 23f
-        canvas.drawText("Personal lending, clearly organised", 82f, 238f, paint)
-        var y = headerHeight + 24f
-        rows.forEachIndexed { index, row ->
-            val h = heights[index]
+        canvas.drawText(if (compact) "Private lending, clearly organised" else "A clear record of principal, interest and repayments", 82f, 194f, paint)
+        paint.textAlign = android.graphics.Paint.Align.RIGHT
+        paint.textSize = 18f
+        canvas.drawText(formatDate(System.currentTimeMillis()), right, 48f, paint)
+        paint.textAlign = android.graphics.Paint.Align.LEFT
+    }
+
+    fun drawSummary(canvas: android.graphics.Canvas, top: Float) {
+        paint.color = white
+        canvas.drawRoundRect(left, top, right, top + summaryHeight - 18f, 26f, 26f, paint)
+        paint.color = muted
+        paint.textSize = 19f
+        paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        canvas.drawText("CURRENT AMOUNT DUE", left + 28f, top + 42f, paint)
+        paint.color = deepGreen
+        paint.textSize = 54f
+        paint.typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+        canvas.drawText(money(outstanding), left + 28f, top + 106f, paint)
+        val labels = listOf("PRINCIPAL", "ACCRUED INTEREST", "TOTAL  ·  PRINCIPAL + INTEREST")
+        val values = listOf(money(loan.principal), money(interest), money(grossTotal))
+        val gap = 14f
+        val cardWidth = (right - left - 56f - gap * 2f) / 3f
+        labels.forEachIndexed { index, label ->
+            val x = left + 28f + index * (cardWidth + gap)
+            val tileColor = if (index == 2) mint else paper
+            paint.color = tileColor
+            canvas.drawRoundRect(x, top + 132f, x + cardWidth, top + summaryHeight - 38f, 15f, 15f, paint)
+            paint.color = if (index == 2) emerald else muted
+            paint.textSize = 15f
+            paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+            canvas.drawText(labels[index], x + 15f, top + 160f, paint)
+            paint.color = ink
+            paint.textSize = if (index == 2) 23f else 22f
+            paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            canvas.drawText(values[index], x + 15f, top + 194f, paint)
+        }
+    }
+
+    fun drawRows(canvas: android.graphics.Canvas, startIndex: Int, startY: Float, bottomY: Float): Pair<Int, Float> {
+        var index = startIndex
+        var y = startY
+        while (index < rows.size) {
+            val row = rows[index]
+            val h = rowHeights[index]
+            if (y + h > bottomY) break
             if (row.section) {
-                paint.color = teal
-                canvas.drawRoundRect(left, y, right, y + h - 8f, 14f, 14f, paint)
-                paint.color = android.graphics.Color.WHITE
-                paint.textSize = 27f
-                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-                canvas.drawText(row.label, left + 20f, y + 38f, paint)
-            } else {
-                val keyRow = row.label.contains("outstanding", true) || row.label.contains("total paid", true) || row.label.contains("principal", true) || row.label.contains("balance", true)
-                paint.color = if (keyRow) highlight else if (index % 2 == 0) pale else android.graphics.Color.WHITE
-                canvas.drawRoundRect(left, y, right, y + h - 6f, 18f, 18f, paint)
-                paint.color = if (keyRow) teal else muted
+                paint.color = deepGreen
+                canvas.drawRoundRect(left, y, right, y + h - 8f, 18f, 18f, paint)
+                paint.color = gold
+                canvas.drawRoundRect(left + 18f, y + 17f, left + 25f, y + h - 25f, 4f, 4f, paint)
+                paint.color = white
                 paint.textSize = 22f
+                paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+                canvas.drawText(row.label, left + 43f, y + 40f, paint)
+            } else {
+                val emphasized = row.label.contains("total amount", true) || row.label.contains("still due", true)
+                paint.color = if (emphasized) mint else white
+                canvas.drawRoundRect(left, y, right, y + h - 7f, 16f, 16f, paint)
+                paint.color = if (emphasized) emerald else muted
+                paint.textSize = 18f
                 paint.typeface = android.graphics.Typeface.DEFAULT
-                canvas.drawText(row.label.take(58), left + 18f, y + 29f, paint)
+                canvas.drawText(row.label.take(72), left + 22f, y + 29f, paint)
                 paint.color = ink
-                paint.textSize = if (keyRow) 29f else 27f
-                paint.typeface = if (keyRow) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                canvas.drawText(row.value, left + 18f, y + 59f, paint)
+                paint.textSize = if (emphasized) 25f else 22f
+                paint.typeface = if (emphasized) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                canvas.drawText(row.value.take(96), left + 22f, y + 59f, paint)
             }
             y += h
+            index++
         }
-        val footer = (y + 15f).coerceAtMost(imageHeight - 120f)
-        paint.color = navy
-        canvas.drawRoundRect(38f, footer, width - 38f, imageHeight - 20f, 22f, 22f, paint)
-        paint.color = android.graphics.Color.WHITE
-        paint.textSize = 23f
+        return index to y
+    }
+
+    try {
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(paper)
+        drawHeader(canvas)
+        drawSummary(canvas, headerHeight + 20f)
+        val (imageEndIndex, endY) = drawRows(canvas, 0, headerHeight + summaryHeight + 12f, imageHeight - 105f)
+        if (imageEndIndex < rows.size) {
+            paint.color = muted
+            paint.textSize = 19f
+            paint.typeface = android.graphics.Typeface.DEFAULT
+            canvas.drawText("Continued in the PDF report for the complete payment history.", left + 4f, endY + 30f, paint)
+        }
+        paint.color = deepGreen
+        canvas.drawRoundRect(left, imageHeight - 76f, right, imageHeight - 24f, 16f, 16f, paint)
+        paint.color = white
+        paint.textSize = 17f
         paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-        canvas.drawText("FundNiti  •  PERSONAL FINANCE", left + 18f, footer + 42f, paint)
-        paint.textSize = 19f
+        canvas.drawText("FundNiti  ·  Personal loan statement", left + 20f, imageHeight - 43f, paint)
+        paint.textSize = 15f
         paint.typeface = android.graphics.Typeface.DEFAULT
-        canvas.drawText("For reference only  •  Verify details before sharing", left + 18f, footer + 78f, paint)
+        canvas.drawText("For reference only. Verify details before sharing.", left + 20f, imageHeight - 22f, paint)
 
         val dir = java.io.File(context.cacheDir, "shared_reports").apply { mkdirs() }
         val file = java.io.File(dir, if (asPdf) "FundNiti-Loan-Report.pdf" else "FundNiti-Loan-Report.png")
         if (asPdf) {
             val doc = android.graphics.pdf.PdfDocument()
-            val pageW = 595
-            val pageH = 842
-            val scale = pageW.toFloat() / width
+            val pageWidth = 595
+            val pageHeight = 842
+            val scale = pageWidth.toFloat() / width
+            val logicalPageHeight = pageHeight / scale
             var rowIndex = 0
             var pageNo = 1
             do {
-                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(pageW, pageH, pageNo).create())
-                val pc = page.canvas
-                pc.drawColor(android.graphics.Color.WHITE)
-                val hp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-                pc.drawRoundRect(18f, 18f, pageW - 18f, headerHeight * scale, 14f, 14f, hp)
-                val title = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; textSize = 25f; typeface = android.graphics.Typeface.DEFAULT_BOLD }
-                title.color = gold
-                pc.drawRoundRect(32f, 30f, 36f, 112f, 2f, 2f, title)
-                title.color = android.graphics.Color.WHITE
-                try {
-                    val drawable = context.packageManager.getApplicationIcon(context.packageName)
-                    val logo = android.graphics.Bitmap.createBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-                    val logoCanvas = android.graphics.Canvas(logo)
-                    drawable.setBounds(0, 0, 48, 48)
-                    drawable.draw(logoCanvas)
-                    pc.drawBitmap(logo, 32f, 18f, title)
-                    logo.recycle()
-                } catch (_: Exception) {}
-                pc.drawText("FundNiti", 90f, 42f, title)
-                title.textSize = 14f
-                pc.drawText("LOAN ACCOUNT STATEMENT", 90f, 64f, title)
-                title.textSize = 9f
-                title.color = android.graphics.Color.rgb(202, 218, 237)
-                pc.drawText("PREMIUM FINANCIAL SUMMARY", 90f, 83f, title)
-                title.color = android.graphics.Color.WHITE
-                val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-                var py = headerHeight * scale + 18f
-                val maxY = pageH - 45f
-                while (rowIndex < rows.size && py + heights[rowIndex] * scale < maxY) {
-                    val row = rows[rowIndex]
-                    val rh = heights[rowIndex] * scale
-                    if (row.section) {
-                        p.color = teal
-                        pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 6f, 6f, p)
-                        p.color = android.graphics.Color.WHITE; p.textSize = 12f; p.typeface = android.graphics.Typeface.DEFAULT_BOLD
-                        pc.drawText(row.label.take(65), 40f, py + rh / 2f + 4f, p)
-                    } else {
-                        val keyRow = row.label.contains("outstanding", true) || row.label.contains("total paid", true) || row.label.contains("principal", true) || row.label.contains("balance", true)
-                        p.color = if (keyRow) highlight else if (rowIndex % 2 == 0) pale else android.graphics.Color.WHITE
-                        pc.drawRoundRect(32f, py, pageW - 32f, py + rh - 3f, 7f, 7f, p)
-                        p.color = if (keyRow) teal else muted; p.textSize = 9f; p.typeface = android.graphics.Typeface.DEFAULT
-                        pc.drawText(row.label.take(34), 40f, py + 14f, p)
-                        p.color = ink; p.textSize = if (keyRow) 12f else 11f; p.typeface = if (keyRow) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-                        pc.drawText(row.value.take(66), 40f, py + 29f, p)
-                    }
-                    py += rh
-                    rowIndex++
+                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNo).create())
+                val pageCanvas = page.canvas
+                pageCanvas.save()
+                pageCanvas.scale(scale, scale)
+                pageCanvas.drawColor(paper)
+                drawHeader(pageCanvas, compact = true)
+                drawSummary(pageCanvas, headerHeight + 12f)
+                val (nextIndex, endRowY) = drawRows(pageCanvas, rowIndex, headerHeight + summaryHeight + 4f, logicalPageHeight - 90f)
+                if (nextIndex == rowIndex && rowIndex < rows.size) {
+                    pageCanvas.restore()
+                    doc.finishPage(page)
+                    doc.close()
+                    error("Could not fit a report row on the PDF page")
                 }
-                val foot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = navy; textSize = 9f }
-                foot.color = navy
-                pc.drawRoundRect(18f, pageH - 42f, pageW - 18f, pageH - 12f, 7f, 7f, foot)
-                foot.color = android.graphics.Color.WHITE
-                pc.drawText("FundNiti  •  Verify details before use", 30f, pageH - 23f, foot)
-                foot.textAlign = android.graphics.Paint.Align.RIGHT
-                pc.drawText("Page $pageNo", pageW - 30f, pageH - 23f, foot)
-                foot.textAlign = android.graphics.Paint.Align.LEFT
+                rowIndex = nextIndex
+                paint.color = deepGreen
+                pageCanvas.drawRoundRect(38f, logicalPageHeight - 76f, width - 38f, logicalPageHeight - 28f, 15f, 15f, paint)
+                paint.color = white
+                paint.textSize = 17f
+                paint.typeface = android.graphics.Typeface.DEFAULT
+                pageCanvas.drawText("FundNiti  ·  Verify details before use", 56f, logicalPageHeight - 46f, paint)
+                paint.textAlign = android.graphics.Paint.Align.RIGHT
+                pageCanvas.drawText("PAGE $pageNo", width - 56f, logicalPageHeight - 46f, paint)
+                paint.textAlign = android.graphics.Paint.Align.LEFT
+                if (rowIndex < rows.size) {
+                    paint.color = muted
+                    paint.textSize = 14f
+                    pageCanvas.drawText("Continued on next page", width - 270f, endRowY - 8f, paint)
+                }
+                pageCanvas.restore()
                 doc.finishPage(page)
                 pageNo++
             } while (rowIndex < rows.size)
@@ -892,15 +931,30 @@ private fun shareLoanReport(context: android.content.Context, loan: LoanEntity, 
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = if (asPdf) "application/pdf" else "image/png"
             putExtra(android.content.Intent.EXTRA_STREAM, uri)
-            putExtra(android.content.Intent.EXTRA_SUBJECT, "FundNiti — Full Loan Report")
-            putExtra(android.content.Intent.EXTRA_TEXT, "FundNiti • Full Loan Report\nFor reference only. Verify details before sharing.")
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "FundNiti — Loan statement")
+            putExtra(android.content.Intent.EXTRA_TEXT, "FundNiti loan statement · Principal plus accrued interest: ${money(grossTotal)} · Current amount due: ${money(outstanding)}. For reference only; verify details before sharing.")
             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(android.content.Intent.createChooser(intent, if (asPdf) "Share loan report PDF" else "Share loan report image"))
+        context.startActivity(android.content.Intent.createChooser(intent, if (asPdf) "Share loan statement PDF" else "Share loan statement image"))
     } catch (e: Exception) {
         Toast.makeText(context, "Could not create report: " + (e.message ?: "unknown error"), Toast.LENGTH_LONG).show()
     } finally {
         bitmap.recycle()
+    }
+}
+
+@Composable
+private fun ReportMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface, maxLines = 2)
+        }
     }
 }
 
@@ -915,6 +969,7 @@ private fun LoanDetailsDialog(
 ) {
     val context = LocalContext.current
     val interest = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
+    val totalAmount = loan.principal + interest
     val totalPaid = payments.sumOf { it.amount }
     val loanStartDate = Instant.ofEpochMilli(loan.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
     val today = LocalDate.now()
@@ -922,64 +977,142 @@ private fun LoanDetailsDialog(
     val totalDays = ChronoUnit.DAYS.between(loanStartDate, durationEndDate)
     val elapsedPeriod = Period.between(loanStartDate, durationEndDate)
     val totalMonths = elapsedPeriod.years * 12 + elapsedPeriod.months
-    AlertDialog(
+    val people = listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → ")
+    val direction = when (loan.direction) {
+        "LENT" -> "You lent money"
+        "BORROWED_FOR_OTHER" -> "Borrowed for someone else"
+        else -> "You borrowed money"
+    }
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text("Full loan report", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(Modifier.fillMaxWidth().height(520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("People", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Text(listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → "))
-                Text(when (loan.direction) { "LENT" -> "You gave money to someone."; "BORROWED_FOR_OTHER" -> "You borrowed money from one person and gave it to someone else."; else -> "You borrowed money for yourself." })
-                androidx.compose.material3.HorizontalDivider()
-                Text("Loan details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                DetailLine("Loan date", formatDate(loan.startDate))
-                DetailLine("Total Days", "$totalDays Days")
-                DetailLine("In Months", String.format(Locale.getDefault(), "%02d Months %02d Days", totalMonths, elapsedPeriod.days))
-                DetailLine("Principal amount", money(loan.principal))
-                DetailLine("Interest rate", "${loan.monthlyRate}% per month")
-                DetailLine("Interest till now", money(interest))
-                DetailLine("Payments made", money(totalPaid))
-                DetailLine("Amount still due", money(outstanding))
-                DetailLine("Status", if (outstanding <= 0.009) "Fully paid" else "Still to be paid")
-                loan.dueDate?.let { DetailLine("Reminder date", formatDate(it)) }
-                if (loan.note.isNotBlank()) DetailLine("Notes", loan.note)
-                androidx.compose.material3.HorizontalDivider()
-                Text("Payments made (${payments.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                if (payments.isEmpty()) Text("No payments recorded yet.")
-                payments.forEachIndexed { index, payment ->
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Payment ${index + 1}: ${money(payment.amount)}", fontWeight = FontWeight.SemiBold)
-                            DetailLine("Date", formatDate(payment.paidAt))
-                            DetailLine("Time", DateFormat.getTimeInstance(DateFormat.MEDIUM).format(Date(payment.paidAt)))
-                            DetailLine("Paid by", payment.paymentMethod)
-                            if (payment.referenceNumber.isNotBlank()) DetailLine(if (payment.paymentMethod == "UPI") "UPI UTR number" else "Transaction number", payment.referenceNumber)
-                            if (payment.note.isNotBlank()) DetailLine("Notes", payment.note)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { onEditPayment(payment) }) {
-                                    Icon(Icons.Filled.Edit, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Edit payment")
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
+            shape = RoundedCornerShape(30.dp),
+            color = MaterialTheme.colorScheme.background,
+            tonalElevation = 8.dp
+        ) {
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 20.dp, end = 12.dp, top = 15.dp, bottom = 15.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(13.dp)
+                ) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Icon(Icons.Filled.AccountBalance, contentDescription = null,
+                            modifier = Modifier.padding(11.dp).size(26.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Loan statement", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(people.ifBlank { "Loan details" }, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                    TextButton(onClick = onDismiss) { Text("Close") }
+                }
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)) {
+                        Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            Text("CURRENT AMOUNT DUE", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f), fontWeight = FontWeight.Bold)
+                            Text(money(outstanding), style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                            Text("${if (outstanding <= 0.009) "Fully paid" else direction} · ${formatDate(loan.startDate)}",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.86f))
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ReportMetric("Principal", money(loan.principal), Modifier.weight(1f))
+                        ReportMetric("Accrued interest", money(interest), Modifier.weight(1f))
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), RoundedCornerShape(22.dp)),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text("TOTAL AMOUNT  ·  PRINCIPAL + INTEREST", style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text(money(totalAmount), style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("${money(loan.principal)} principal + ${money(interest)} accrued interest",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                    GlassPanel("Loan details", "Key dates, rate and saved information") {
+                        DetailLine("Loan direction", direction)
+                        DetailLine("Loan date", formatDate(loan.startDate))
+                        DetailLine("Duration", "$totalMonths months, ${elapsedPeriod.days} days · $totalDays days total")
+                        DetailLine("Interest rate", "${loan.monthlyRate}% per month")
+                        DetailLine("Payments recorded", money(totalPaid))
+                        DetailLine("Amount still due", money(outstanding))
+                        DetailLine("Status", if (outstanding <= 0.009) "Fully paid" else "Outstanding")
+                        loan.dueDate?.let { DetailLine("Reminder date", formatDate(it)) }
+                        if (loan.note.isNotBlank()) DetailLine("Notes", loan.note)
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text("Payment activity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("${payments.size} recorded ${if (payments.size == 1) "payment" else "payments"}",
+                                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                TextButton(onClick = { onDeletePayment(payment) }) {
-                                    Icon(Icons.Filled.Delete, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Delete payment")
+                                Text(money(totalPaid), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
+                            if (payments.isEmpty()) {
+                                Text("No repayments have been recorded yet.", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            payments.forEachIndexed { index, payment ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                ) {
+                                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Payment ${index + 1}", modifier = Modifier.weight(1f),
+                                                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                            Text(money(payment.amount), style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        DetailLine("Date", formatDate(payment.paidAt) + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(payment.paidAt)))
+                                        DetailLine("Method", payment.paymentMethod)
+                                        if (payment.referenceNumber.isNotBlank()) DetailLine(if (payment.paymentMethod == "UPI") "UPI UTR" else "Reference", payment.referenceNumber)
+                                        if (payment.note.isNotBlank()) DetailLine("Note", payment.note)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            TextButton(onClick = { onEditPayment(payment) }) { Text("Edit payment") }
+                                            TextButton(onClick = { onDeletePayment(payment) }) { Text("Delete") }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                Text("You can change or delete any payment. The amount still due updates automatically.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Share full report", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { shareLoanReport(context = context, loan = loan, payments = payments, outstanding = outstanding, asPdf = true) }, modifier = Modifier.weight(1f)) {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(onClick = { shareLoanReport(context, loan, payments, outstanding, true) }, modifier = Modifier.weight(1f)) {
                         Text("Share PDF")
                     }
-                    Button(onClick = { shareLoanReport(context = context, loan = loan, payments = payments, outstanding = outstanding, asPdf = false) }, modifier = Modifier.weight(1f)) {
+                    androidx.compose.material3.OutlinedButton(onClick = { shareLoanReport(context, loan, payments, outstanding, false) }, modifier = Modifier.weight(1f)) {
                         Text("Share image")
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close report") } }
-    )
+        }
+    }
 }
 
 @Composable
@@ -996,21 +1129,38 @@ private fun DashboardScreen(
     paid: Double, monthlyInterest: Double, balance: (LoanEntity) -> Double, onViewLoans: () -> Unit,
     onViewDetails: (LoanEntity) -> Unit, payments: List<PaymentEntity>
 ) {
-    LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Spacer(Modifier.height(4.dp)); Text("A clearer view of your money", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+    val heroDecoration = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.09f)
+    LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item {
+            Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Good to see you", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Your finances, at a glance", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("A calm, clear view of every loan and repayment.", style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("TOTAL OUTSTANDING", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
-                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    Text(money(outstanding), color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                    Text(amountInWords(outstanding), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f),
-                        style = MaterialTheme.typography.labelSmall)
-                    Spacer(Modifier.height(8.dp))
-                    Text("${loans.size} active loan records", color = MaterialTheme.colorScheme.onPrimary)
+                Box {
+                    Canvas(Modifier.align(Alignment.TopEnd).size(150.dp)) {
+                        drawCircle(heroDecoration, size.minDimension * 0.48f, androidx.compose.ui.geometry.Offset(size.width * 0.82f, size.height * 0.08f))
+                        drawCircle(heroDecoration, size.minDimension * 0.27f, androidx.compose.ui.geometry.Offset(size.width * 0.82f, size.height * 0.08f))
+                    }
+                    Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("PORTFOLIO OVERVIEW", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f),
+                            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Current outstanding", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.92f),
+                            style = MaterialTheme.typography.bodyMedium)
+                        Text(money(outstanding), color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                        Text("${loans.size} active loan ${if (loans.size == 1) "record" else "records"}",
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f), style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(2.dp))
+                        androidx.compose.material3.TextButton(onClick = onViewLoans) {
+                            Text("Review loans  →", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
@@ -1026,12 +1176,21 @@ private fun DashboardScreen(
                 StatCard("People", loans.flatMap { listOf(it.personName, it.personName2, it.personName3) }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.distinct().size.toString(), Modifier.weight(1f))
             }
         }
-        item { Text("Recent loans", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        if (loans.isEmpty()) item { EmptyState("No loans yet", "Tap Loans, then + to add your first record.") }
-        items(loans.take(5), key = { it.id }) { loan -> LoanCard(loan, balance(loan), payments.filter { it.loanId == loan.id }.sumOf { it.amount }, {}, null, null, { onViewDetails(loan) }) }
-        item { Button(onClick = onViewLoans, modifier = Modifier.fillMaxWidth()) { Text("View all loans") } }
-        item { Text("Interest is worked out each month on the original amount.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Recent loans", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Tap a record to open its complete statement.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (loans.isEmpty()) item { EmptyState("Your first loan starts here", "Tap the + button to add a clear, private record.") }
+        items(loans.take(5), key = { it.id }) {
+            loan -> LoanCard(loan, balance(loan), payments.filter { it.loanId == loan.id }.sumOf { it.amount }, {}, null, null, { onViewDetails(loan) }, compact = true)
+        }
+        item { androidx.compose.material3.OutlinedButton(onClick = onViewLoans, modifier = Modifier.fillMaxWidth()) { Text("View all loan records") } }
+        item { Text("Interest uses simple monthly calculations on the original principal.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 10.dp)) }
     }
 }
 
@@ -1063,26 +1222,43 @@ private fun LoansScreen(
 
 @Composable
 private fun LoanCard(
-    loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?, onViewDetails: (() -> Unit)? = null
+    loan: LoanEntity, balance: Double, paid: Double, onAddPayment: () -> Unit, onEdit: (() -> Unit)?, onDelete: (() -> Unit)?,
+    onViewDetails: (() -> Unit)? = null, compact: Boolean = false
 ) {
     Card(onClick = { onViewDetails?.invoke() }, enabled = onViewDetails != null,
         modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.padding(if (compact) 15.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text(listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → "), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(when (loan.direction) { "LENT" -> "You lent money"; "BORROWED_FOR_OTHER" -> "Borrowed for someone else"; else -> "You borrowed money" },
+                    Text(listOf(loan.personName, loan.personName2, loan.personName3).filter { it.isNotBlank() }.joinToString(" → "),
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    if (!compact) Text(when (loan.direction) { "LENT" -> "You lent money"; "BORROWED_FOR_OTHER" -> "Borrowed for someone else"; else -> "You borrowed money" },
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
-                Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(150.dp)) {
-                    Text(money(balance), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(amountInWords(balance), style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(if (compact) 112.dp else 150.dp)) {
+                    Text(money(balance), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        color = if (compact) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                    Text(if (compact) "Outstanding" else amountInWords(balance), style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = if (compact) 1 else 2)
                 }
             }
+            if (compact) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Text(when (loan.direction) { "LENT" -> "LENT"; "BORROWED_FOR_OTHER" -> "FOR SOMEONE"; else -> "BORROWED" },
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Text("Started ${formatDate(loan.startDate)}", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (paid > 0.0) Text("${money(paid)} paid so far", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
             val elapsedDays = elapsedLoanDays(loan.startDate, System.currentTimeMillis())
             val interestAmount = accruedInterest(loan.principal, loan.monthlyRate, loan.startDate, System.currentTimeMillis())
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1108,6 +1284,7 @@ private fun LoanCard(
                         Icon(Icons.Filled.Delete, contentDescription = "Delete loan")
                     }
                 }
+            }
             }
         }
     }
@@ -2421,8 +2598,50 @@ private fun BackupScreen(
                 Text("Simple interest on the original principal at the fixed monthly rate. Full monthly anniversary periods receive the full monthly rate; partial periods are prorated by elapsed calendar days divided by the actual days in that monthly period. Recorded payments are deducted from accrued interest plus principal in the displayed outstanding balance.", style = MaterialTheme.typography.bodySmall)
                 Text("Privacy by design", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("No account, external server, or cloud sync is required. FundNiti keeps a portable JSON snapshot in Android/media/com.fundniti/Lendora/backup and restores it on a fresh install when the local database is empty. This automatic snapshot is not encrypted so reinstalling can read it; protect the file because it contains financial records. Manual encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
-                Text("FundNiti · Native Android · Kotlin + Jetpack Compose · Version 1.1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("FundNiti · Native Android · Kotlin + Jetpack Compose · Version 1.2.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+}
+
+@Composable
+private fun LoanDirectionCard(
+    label: String,
+    description: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val container = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val content = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    Card(
+        onClick = onClick,
+        modifier = modifier.border(
+            width = if (selected) 1.5.dp else 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            shape = RoundedCornerShape(18.dp)
+        ),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content)
+            Text(description, style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.78f))
+        }
+    }
+}
+
+@Composable
+private fun LoanFormHeading(number: String, title: String, subtitle: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.secondaryContainer) {
+            Text(number, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -2448,75 +2667,160 @@ private fun LoanDialog(
     }
     var note by remember(existing?.id) { mutableStateOf(existing?.note ?: "") }
     val amount = parseAmount(principal)
-    val interest = rate.toDoubleOrNull()
+    val interestRate = rate.toDoubleOrNull()
     val parsedDate = runCatching { LocalDate.parse(startDateText) }.getOrNull()
     val validStartDate = parsedDate != null && !parsedDate.isAfter(LocalDate.now())
     val startMillis = if (validStartDate) parsedDate!!.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() else null
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Add loan" else "Edit loan") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    name1, { name1 = it },
-                    label = { Text(if (direction == "LENT") "Person who received money" else "Person you borrowed money from") },
-                    supportingText = { Text(if (direction == "LENT") "Who did you give the money to?" else "Who gave you the money?") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    name2, { name2 = it },
-                    label = { Text(if (direction == "BORROWED_FOR_OTHER") "Your name (person who borrowed)" else if (direction == "LENT") "Your name / lender name" else "Your name (optional)") },
-                    supportingText = { Text(if (direction == "BORROWED_FOR_OTHER") "Name used when you borrowed the money" else "Optional name for your side of this record") },
-                    singleLine = true
-                )
-                if (direction == "BORROWED_FOR_OTHER") OutlinedTextField(name3, { name3 = it }, label = { Text("Person you gave the money to") }, supportingText = { Text("The person who asked you for money") }, singleLine = true)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    androidx.compose.material3.FilterChip(selected = direction == "LENT", onClick = { direction = "LENT" }, label = { Text("I lent") })
-                    androidx.compose.material3.FilterChip(selected = direction == "BORROWED", onClick = { direction = "BORROWED" }, label = { Text("I borrowed") })
-                    androidx.compose.material3.FilterChip(selected = direction == "BORROWED_FOR_OTHER", onClick = { direction = "BORROWED_FOR_OTHER" }, label = { Text("Borrowed for someone") })
+    val canSave = name1.isNotBlank() &&
+        (direction != "BORROWED_FOR_OTHER" || (name2.isNotBlank() && name3.isNotBlank())) &&
+        amount != null && amount > 0 && interestRate != null && interestRate >= 0 && startMillis != null
+    val monthlyInterest = if (amount != null && interestRate != null && interestRate >= 0) amount * interestRate / 100.0 else null
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.94f),
+            shape = RoundedCornerShape(30.dp),
+            color = MaterialTheme.colorScheme.background,
+            tonalElevation = 8.dp
+        ) {
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 19.dp, end = 12.dp, top = 15.dp, bottom = 15.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(11.dp).size(26.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(if (existing == null) "Add a loan" else "Edit loan", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("A clear record, ready when you need it", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
                 }
-                OutlinedTextField(
-                    value = principal,
-                    onValueChange = { principal = amountInputFormat(it) },
-                    label = { Text("Principal amount (₹)") },
-                    supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
-                    singleLine = true
-                )
-                OutlinedTextField(rate, { rate = it }, label = { Text("Fixed interest (% per month)") }, singleLine = true)
-                OutlinedTextField(
-                    value = startDateText,
-                    onValueChange = { startDateText = it },
-                    label = { Text("Loan taken date (yyyy-MM-dd)") },
-                    supportingText = { Text("Tap Choose to select a past or current date.") },
-                    trailingIcon = {
-                        TextButton(onClick = {
-                            val date = parsedDate ?: LocalDate.now()
-                            DatePickerDialog(
-                                context,
-                                { _, year, month, day -> startDateText = LocalDate.of(year, month + 1, day).toString() },
-                                date.year, date.monthValue - 1, date.dayOfMonth
-                            ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
-                        }) { Text("Choose") }
-                    },
-                    isError = !validStartDate,
-                    singleLine = true
-                )
-                OutlinedTextField(dueDays, { dueDays = it.filter(Char::isDigit).take(4) },
-                    label = { Text("Reminder due in days from today (0 = none)") }, singleLine = true)
-                OutlinedTextField(note, { note = it }, label = { Text("Note (optional)") })
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (name1.isNotBlank() && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
-                    onSave(name1, name2, name3, direction, amount, interest, startMillis, dueDays.toIntOrNull() ?: 0, note)
+                Column(
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(15.dp)
+                ) {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            LoanFormHeading("01", "Loan direction", "Choose how this money is being tracked")
+                            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                LoanDirectionCard("I lent", "You gave money", direction == "LENT", Modifier.weight(1f)) { direction = "LENT" }
+                                LoanDirectionCard("I borrowed", "You received money", direction == "BORROWED", Modifier.weight(1f)) { direction = "BORROWED" }
+                            }
+                            LoanDirectionCard("Borrowed for someone", "You borrowed money and passed it on", direction == "BORROWED_FOR_OTHER", Modifier.fillMaxWidth()) { direction = "BORROWED_FOR_OTHER" }
+                        }
+                    }
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            LoanFormHeading("02", "People", "Keep everyone linked to this loan")
+                            OutlinedTextField(
+                                value = name1, onValueChange = { name1 = it }, modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (direction == "LENT") "Borrower / person who received money" else "Lender / person you borrowed from") },
+                                supportingText = { Text(if (direction == "LENT") "Who did you give the money to?" else "Who gave you the money?") },
+                                singleLine = true, shape = RoundedCornerShape(16.dp)
+                            )
+                            OutlinedTextField(
+                                value = name2, onValueChange = { name2 = it }, modifier = Modifier.fillMaxWidth(),
+                                label = { Text(if (direction == "BORROWED_FOR_OTHER") "Your name (borrower)" else if (direction == "LENT") "Your name / lender name" else "Your name (optional)") },
+                                supportingText = { Text(if (direction == "BORROWED_FOR_OTHER") "Name used when you borrowed the money" else "Optional name for your side of this record") },
+                                singleLine = true, shape = RoundedCornerShape(16.dp)
+                            )
+                            if (direction == "BORROWED_FOR_OTHER") {
+                                OutlinedTextField(
+                                    value = name3, onValueChange = { name3 = it }, modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Person you gave the money to") },
+                                    supportingText = { Text("The person who asked you for money") }, singleLine = true,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                            }
+                        }
+                    }
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            LoanFormHeading("03", "Amount and interest", "Interest is calculated on the original principal")
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = principal, onValueChange = { principal = amountInputFormat(it) },
+                                    modifier = Modifier.weight(1.35f), label = { Text("Principal (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                OutlinedTextField(
+                                    value = rate, onValueChange = { rate = it.filter { ch -> ch.isDigit() || ch == '.' }.take(8) },
+                                    modifier = Modifier.weight(1f), label = { Text("Rate / month (%)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                            }
+                            if (monthlyInterest != null) {
+                                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Estimated interest per full month", modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                        Text(money(monthlyInterest), fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                            LoanFormHeading("04", "Dates and reminder", "Use the actual loan date and set a reminder if needed")
+                            OutlinedTextField(
+                                value = startDateText, onValueChange = { startDateText = it }, modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Loan date") }, supportingText = { Text("Choose a date today or earlier") },
+                                trailingIcon = {
+                                    TextButton(onClick = {
+                                        val date = parsedDate ?: LocalDate.now()
+                                        DatePickerDialog(
+                                            context,
+                                            { _, year, month, day -> startDateText = LocalDate.of(year, month + 1, day).toString() },
+                                            date.year, date.monthValue - 1, date.dayOfMonth
+                                        ).apply { datePicker.maxDate = System.currentTimeMillis() }.show()
+                                    }) { Text("Choose date") }
+                                },
+                                isError = !validStartDate, singleLine = true, shape = RoundedCornerShape(16.dp)
+                            )
+                            if (!validStartDate) Text("Enter a valid date that is not in the future.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            OutlinedTextField(
+                                value = dueDays, onValueChange = { dueDays = it.filter(Char::isDigit).take(4) },
+                                modifier = Modifier.fillMaxWidth(), label = { Text("Reminder after (days)") },
+                                supportingText = { Text("Enter 0 if you do not want a reminder") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true, shape = RoundedCornerShape(16.dp)
+                            )
+                            OutlinedTextField(
+                                value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Note (optional)") }, minLines = 2, maxLines = 4,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                        }
+                    }
                 }
-            }, enabled = name1.isNotBlank() && (direction != "BORROWED_FOR_OTHER" || (name2.isNotBlank() && name3.isNotBlank())) && amount != null && amount > 0 && interest != null && interest >= 0 && startMillis != null) {
-                Text(if (existing == null) "Save loan" else "Save changes")
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel") }
+                    Button(
+                        onClick = {
+                            if (canSave && amount != null && interestRate != null && startMillis != null) {
+                                onSave(name1, name2, name3, direction, amount, interestRate, startMillis, dueDays.toIntOrNull() ?: 0, note)
+                            }
+                        },
+                        enabled = canSave,
+                        modifier = Modifier.weight(1.35f), shape = RoundedCornerShape(16.dp)
+                    ) { Text(if (existing == null) "Save loan" else "Save changes") }
+                }
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+    }
 }
 
 @Composable
