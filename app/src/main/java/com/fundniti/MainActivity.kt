@@ -139,13 +139,14 @@ import java.time.temporal.ChronoUnit
 private fun modernTypography(): androidx.compose.material3.Typography {
     val base = androidx.compose.material3.Typography()
     val font = FontFamily.SansSerif
+    val displayFont = FontFamily.Serif
     return base.copy(
-        displayLarge = base.displayLarge.copy(fontFamily = font),
-        displayMedium = base.displayMedium.copy(fontFamily = font),
-        displaySmall = base.displaySmall.copy(fontFamily = font),
-        headlineLarge = base.headlineLarge.copy(fontFamily = font),
-        headlineMedium = base.headlineMedium.copy(fontFamily = font),
-        headlineSmall = base.headlineSmall.copy(fontFamily = font),
+        displayLarge = base.displayLarge.copy(fontFamily = displayFont),
+        displayMedium = base.displayMedium.copy(fontFamily = displayFont),
+        displaySmall = base.displaySmall.copy(fontFamily = displayFont),
+        headlineLarge = base.headlineLarge.copy(fontFamily = displayFont),
+        headlineMedium = base.headlineMedium.copy(fontFamily = displayFont),
+        headlineSmall = base.headlineSmall.copy(fontFamily = displayFont),
         titleLarge = base.titleLarge.copy(fontFamily = font),
         titleMedium = base.titleMedium.copy(fontFamily = font),
         titleSmall = base.titleSmall.copy(fontFamily = font),
@@ -202,26 +203,26 @@ private fun LoanManagerApp() {
     }
     val appColorScheme = when {
         darkTheme -> androidx.compose.material3.darkColorScheme(
-            primary = Color(0xFF8DDBB8), onPrimary = Color(0xFF063729),
-            primaryContainer = Color(0xFF164E3B), onPrimaryContainer = Color(0xFFC9F4DE),
-            secondary = Color(0xFFEAC46F), onSecondary = Color(0xFF3C2E08),
-            secondaryContainer = Color(0xFF524318), onSecondaryContainer = Color(0xFFFFE9A8),
+            primary = Color(0xFFB4C998), onPrimary = Color(0xFF243526),
+            primaryContainer = Color(0xFF41503A), onPrimaryContainer = Color(0xFFE0E9CE),
+            secondary = Color(0xFFE1BD75), onSecondary = Color(0xFF35280F),
+            secondaryContainer = Color(0xFF55451F), onSecondaryContainer = Color(0xFFF4DCA7),
             tertiary = Color(0xFF9FC9F4), onTertiary = Color(0xFF15324D),
-            background = Color(0xFF0D1512), onBackground = Color(0xFFE0E9E3),
-            surface = Color(0xFF141E19), onSurface = Color(0xFFE0E9E3),
-            surfaceVariant = Color(0xFF202D26), onSurfaceVariant = Color(0xFFB4C4BA),
-            outline = Color(0xFF82958A), outlineVariant = Color(0xFF34453B)
+            background = Color(0xFF191A16), onBackground = Color(0xFFE9E1CE),
+            surface = Color(0xFF24251F), onSurface = Color(0xFFE9E1CE),
+            surfaceVariant = Color(0xFF34342B), onSurfaceVariant = Color(0xFFC7BFA9),
+            outline = Color(0xFF9C9278), outlineVariant = Color(0xFF514D3F)
         )
         else -> androidx.compose.material3.lightColorScheme(
-            primary = Color(0xFF08795A), onPrimary = Color.White,
-            primaryContainer = Color(0xFFC8F3DF), onPrimaryContainer = Color(0xFF062E22),
-            secondary = Color(0xFF8D6500), onSecondary = Color.White,
-            secondaryContainer = Color(0xFFFFE8AA), onSecondaryContainer = Color(0xFF302300),
+            primary = Color(0xFF315B43), onPrimary = Color(0xFFFFF8E9),
+            primaryContainer = Color(0xFFD6E0C8), onPrimaryContainer = Color(0xFF1C3828),
+            secondary = Color(0xFF9A6B21), onSecondary = Color.White,
+            secondaryContainer = Color(0xFFF2D99F), onSecondaryContainer = Color(0xFF3B2A10),
             tertiary = Color(0xFF386B9E), onTertiary = Color.White,
-            background = Color(0xFFF4F8F5), onBackground = Color(0xFF17211B),
-            surface = Color(0xFFFEFFFE), onSurface = Color(0xFF17211B),
-            surfaceVariant = Color(0xFFE7EFE9), onSurfaceVariant = Color(0xFF536158),
-            outline = Color(0xFF738078), outlineVariant = Color(0xFFD5DED7)
+            background = Color(0xFFE9E1CE), onBackground = Color(0xFF29291F),
+            surface = Color(0xFFF7F1E3), onSurface = Color(0xFF29291F),
+            surfaceVariant = Color(0xFFE2D8C1), onSurfaceVariant = Color(0xFF5D5A4B),
+            outline = Color(0xFF8B8067), outlineVariant = Color(0xFFC9BDA4)
         )
     }
     val db = remember { LoanDatabase.get(context) }
@@ -956,7 +957,7 @@ private fun ReportMetric(label: String, value: String, modifier: Modifier = Modi
         modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp)),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
@@ -1022,7 +1023,7 @@ private fun LoanDetailsDialog(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)) {
+                    Card(shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Text("CURRENT AMOUNT DUE", style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f), fontWeight = FontWeight.Bold)
@@ -1040,7 +1041,7 @@ private fun LoanDetailsDialog(
                         modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), RoundedCornerShape(22.dp)),
                         shape = RoundedCornerShape(22.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    ) {
+                     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text("TOTAL AMOUNT  ·  PRINCIPAL + INTEREST", style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -1065,7 +1066,7 @@ private fun LoanDetailsDialog(
                         modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
+                     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
@@ -1085,7 +1086,7 @@ private fun LoanDetailsDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                                ) {
+                                 , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text("Payment ${index + 1}", modifier = Modifier.weight(1f),
@@ -1152,7 +1153,7 @@ private fun DashboardScreen(
         }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
+                shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth() , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                 Box {
                     Canvas(Modifier.align(Alignment.TopEnd).size(150.dp)) {
                         drawCircle(heroDecoration, size.minDimension * 0.48f, androidx.compose.ui.geometry.Offset(size.width * 0.82f, size.height * 0.08f))
@@ -1307,7 +1308,7 @@ private fun CalculatorsScreen(modifier: Modifier) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(26.dp)),
-            shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
             Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                 Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer) {
@@ -1367,7 +1368,7 @@ private fun InterestCalculatorCard() {
         Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Interest Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             OutlinedTextField(principalText, { principalText = amountInputFormat(it) },
@@ -1421,7 +1422,7 @@ private fun TenureCalculatorCard() {
         Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Tenure Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
@@ -1466,7 +1467,7 @@ private fun TenureCalculatorCard() {
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                ) {
+                 , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Calculated duration", style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -1548,7 +1549,7 @@ private fun PaddyCalculatorCard() {
         Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
+     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Paddy Calculator", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(
@@ -1621,7 +1622,7 @@ private fun PaddyCalculatorCard() {
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                ) {
+                 , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Calculation result", style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold)
@@ -1907,7 +1908,7 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
         }
         item {
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                 Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("PEOPLE TRACKED", style = MaterialTheme.typography.labelMedium,
@@ -2272,7 +2273,7 @@ private fun PaymentBars(data: List<Pair<String, Double>>) {
 @Composable
 private fun DataNeededPanel(title: String, description: String) {
     Card(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
-        shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Filled.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -2643,7 +2644,7 @@ private fun BackupScreen(
                 Button(onClick = onExport, modifier = Modifier.fillMaxWidth()) { Text("Export encrypted backup file") }
             }
         }
-        Card(Modifier.fillMaxWidth()) {
+        Card(Modifier.fillMaxWidth() , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileUpload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Restore records", style = MaterialTheme.typography.titleMedium)
@@ -2653,7 +2654,7 @@ private fun BackupScreen(
                 Button(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Choose backup file") }
             }
         }
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Device backup status", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(backupStatus, style = MaterialTheme.typography.bodySmall)
@@ -2710,7 +2711,7 @@ private fun LoanDirectionCard(
         ),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = container)
-    ) {
+     , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
         Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = content)
             Text(description, style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.78f))
@@ -2791,7 +2792,7 @@ private fun LoanDialog(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(15.dp)
                 ) {
-                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             LoanFormHeading("01", "Loan direction", "Choose how this money is being tracked")
                             Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -2801,7 +2802,7 @@ private fun LoanDialog(
                             LoanDirectionCard("Borrowed for someone", "You borrowed money and passed it on", direction == "BORROWED_FOR_OTHER", Modifier.fillMaxWidth()) { direction = "BORROWED_FOR_OTHER" }
                         }
                     }
-                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                             LoanFormHeading("02", "People", "Keep everyone linked to this loan")
                             OutlinedTextField(
@@ -2826,7 +2827,7 @@ private fun LoanDialog(
                             }
                         }
                     }
-                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                             LoanFormHeading("03", "Amount and interest", "Interest is calculated on the original principal")
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2855,7 +2856,7 @@ private fun LoanDialog(
                             }
                         }
                     }
-                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                             LoanFormHeading("04", "Dates and reminder", "Use the actual loan date and set a reminder if needed")
                             OutlinedTextField(
@@ -2941,7 +2942,7 @@ private fun PaymentDialog(existing: PaymentEntity?, onDismiss: () -> Unit, onSav
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("PAYMENT AMOUNT", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer)
@@ -2972,7 +2973,7 @@ private fun PaymentDialog(existing: PaymentEntity?, onDismiss: () -> Unit, onSav
                         label = { Text(if (method == "UPI") "UPI UTR number" else "Transaction / reference number") },
                         singleLine = true)
                     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Payment date & time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3104,7 +3105,7 @@ private fun PaddySeasonScreen(
             StatCard("Paid", money(totalPaid), Modifier.weight(1f))
         }
         Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface) , elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)) {
             Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text("Storage overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("${storageSummary.size} locations · ${visible.size} recorded lots",
