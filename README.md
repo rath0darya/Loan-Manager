@@ -34,8 +34,8 @@ An elegant, offline-first Android loan ledger for money lent, money borrowed, an
 ## 🎨 Appearance
 
 - **System, Light, and Dark** modes.
-- Emerald accents and warm gold highlights.
-- Android dynamic colours on supported Android versions.
+- Warm ledger-paper surfaces, forest-green accents, brass highlights, serif display type, and raised cards create a tactile skeuomorphic finish.
+- Android dynamic colours are intentionally disabled for a consistent ledger palette.
 - Native Jetpack Compose and Material 3 interface.
 
 ## 🧮 Interest method
@@ -55,6 +55,7 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 - The Room database is the app's working database and remains inside Android's app sandbox.
 - The current automatic snapshot is saved to `Download/FundNiti/Backup/Lendora-Data.json` in shared Downloads.
 - Each backup run replaces the existing snapshot with the latest complete database state; it does not append to old data.
+- New backups include a SHA-256 integrity checksum. FundNiti verifies it before restoring and continues to accept older backups without a checksum.
 - On a fresh installation, FundNiti checks the automatic snapshot and restores records if the database is empty and the backup is present and readable.
 - Open **Backup → Back up all data now** to write a fresh snapshot immediately.
 - Manual `.lendora` exports use AES-GCM encryption with Android Keystore and are generally tied to the original installation/device key.
@@ -80,7 +81,7 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 
 - **App name:** FundNiti
 - **Application ID:** `com.fundniti`
-- **Current version:** `1.2.0`
+- **Current version:** `1.3.0`
 - **Data storage:** On-device Room database
 - **Upgrade note:** `com.fundniti` installs as a separate Android app from earlier `com.rath0darya.loanmanager` builds. Keep the automatic `Lendora-Data.json` snapshot and restore it in the new app; encrypted `.lendora` exports are tied to the installation key.
 - **Network backend:** None required
