@@ -1,4 +1,4 @@
-package com.rath0darya.loanmanager
+package com.fundniti
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

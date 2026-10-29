@@ -1,6 +1,6 @@
 <resources>
-    <color name="loan_green">#126B55</color>
-    <color name="loan_green_dark">#092723</color>
-    <color name="loan_mint">#DDF5E9</color>
-    <color name="loan_gold">#E7C77A</color>
+    <color name="loan_green">#0B3B2C</color>
+    <color name="loan_green_dark">#062A20</color>
+    <color name="loan_mint">#EAF7EF</color>
+    <color name="loan_gold">#EAC46F</color>
 </resources>

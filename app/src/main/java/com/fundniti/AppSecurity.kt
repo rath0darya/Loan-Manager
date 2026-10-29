@@ -1,4 +1,4 @@
-package com.rath0darya.loanmanager
+package com.fundniti
 
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt

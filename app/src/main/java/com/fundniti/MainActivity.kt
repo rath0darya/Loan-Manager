@@ -1,4 +1,4 @@
-package com.rath0darya.loanmanager
+package com.fundniti
 
 import android.Manifest
 import android.app.Activity
@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -67,6 +68,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -90,6 +93,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.DarkMode
@@ -130,19 +134,19 @@ import java.time.ZoneId
 import java.time.Period
 import java.time.temporal.ChronoUnit
 
-private fun modernTypography(colors: androidx.compose.material3.ColorScheme): androidx.compose.material3.Typography {
+private fun modernTypography(): androidx.compose.material3.Typography {
     val base = androidx.compose.material3.Typography()
     val font = FontFamily.SansSerif
     return base.copy(
-        displayLarge = base.displayLarge.copy(fontFamily = font, color = colors.primary),
-        displayMedium = base.displayMedium.copy(fontFamily = font, color = colors.primary),
-        displaySmall = base.displaySmall.copy(fontFamily = font, color = colors.primary),
-        headlineLarge = base.headlineLarge.copy(fontFamily = font, color = colors.primary),
-        headlineMedium = base.headlineMedium.copy(fontFamily = font, color = colors.primary),
-        headlineSmall = base.headlineSmall.copy(fontFamily = font, color = colors.primary),
-        titleLarge = base.titleLarge.copy(fontFamily = font, color = colors.primary),
-        titleMedium = base.titleMedium.copy(fontFamily = font, color = colors.primary),
-        titleSmall = base.titleSmall.copy(fontFamily = font, color = colors.primary),
+        displayLarge = base.displayLarge.copy(fontFamily = font),
+        displayMedium = base.displayMedium.copy(fontFamily = font),
+        displaySmall = base.displaySmall.copy(fontFamily = font),
+        headlineLarge = base.headlineLarge.copy(fontFamily = font),
+        headlineMedium = base.headlineMedium.copy(fontFamily = font),
+        headlineSmall = base.headlineSmall.copy(fontFamily = font),
+        titleLarge = base.titleLarge.copy(fontFamily = font),
+        titleMedium = base.titleMedium.copy(fontFamily = font),
+        titleSmall = base.titleSmall.copy(fontFamily = font),
         bodyLarge = base.bodyLarge.copy(fontFamily = font),
         bodyMedium = base.bodyMedium.copy(fontFamily = font),
         bodySmall = base.bodySmall.copy(fontFamily = font),
@@ -194,20 +198,28 @@ private fun LoanManagerApp() {
         "DARK" -> true
         else -> systemDark
     }
-    val dynamicColors = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val appColorScheme = when {
-        dynamicColors && darkTheme -> androidx.compose.material3.dynamicDarkColorScheme(context)
-        dynamicColors -> androidx.compose.material3.dynamicLightColorScheme(context)
         darkTheme -> androidx.compose.material3.darkColorScheme(
-            primary = Color(0xFF83D6BB), secondary = Color(0xFFE7C77A),
-            background = Color(0xFF101714), surface = Color(0xFF171F1B),
-            surfaceVariant = Color(0xFF26352E), tertiary = Color(0xFF9BBEFF)
+            primary = Color(0xFF8DDBB8), onPrimary = Color(0xFF063729),
+            primaryContainer = Color(0xFF164E3B), onPrimaryContainer = Color(0xFFC9F4DE),
+            secondary = Color(0xFFEAC46F), onSecondary = Color(0xFF3C2E08),
+            secondaryContainer = Color(0xFF524318), onSecondaryContainer = Color(0xFFFFE9A8),
+            tertiary = Color(0xFF9FC9F4), onTertiary = Color(0xFF15324D),
+            background = Color(0xFF0D1512), onBackground = Color(0xFFE0E9E3),
+            surface = Color(0xFF141E19), onSurface = Color(0xFFE0E9E3),
+            surfaceVariant = Color(0xFF202D26), onSurfaceVariant = Color(0xFFB4C4BA),
+            outline = Color(0xFF82958A), outlineVariant = Color(0xFF34453B)
         )
         else -> androidx.compose.material3.lightColorScheme(
-            primary = Color(0xFF126B55), onPrimary = Color.White,
-            secondary = Color(0xFFB5D8C8), background = Color(0xFFF2F7F5),
-            surface = Color(0xFFF9FCFB), surfaceVariant = Color(0xFFE5F0EB),
-            tertiary = Color(0xFF4C86D9)
+            primary = Color(0xFF08795A), onPrimary = Color.White,
+            primaryContainer = Color(0xFFC8F3DF), onPrimaryContainer = Color(0xFF062E22),
+            secondary = Color(0xFF8D6500), onSecondary = Color.White,
+            secondaryContainer = Color(0xFFFFE8AA), onSecondaryContainer = Color(0xFF302300),
+            tertiary = Color(0xFF386B9E), onTertiary = Color.White,
+            background = Color(0xFFF4F8F5), onBackground = Color(0xFF17211B),
+            surface = Color(0xFFFEFFFE), onSurface = Color(0xFF17211B),
+            surfaceVariant = Color(0xFFE7EFE9), onSurfaceVariant = Color(0xFF536158),
+            outline = Color(0xFF738078), outlineVariant = Color(0xFFD5DED7)
         )
     }
     val db = remember { LoanDatabase.get(context) }
@@ -217,6 +229,8 @@ private fun LoanManagerApp() {
     val paddyRecords by dao.observeSeasonPaddy().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf(AppPage.Home) }
+    var themeMenuExpanded by remember { mutableStateOf(false) }
+    var showExitConfirmation by remember { mutableStateOf(false) }
     var showAddLoan by remember { mutableStateOf(false) }
     var editLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
@@ -227,6 +241,20 @@ private fun LoanManagerApp() {
     var confirmLoanDeleteFinal by remember { mutableStateOf(false) }
     var confirmPaymentDeleteFinal by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
+    BackHandler(enabled = !appLocked) {
+        when {
+            deleteConfirmPayment != null -> { deleteConfirmPayment = null; confirmPaymentDeleteFinal = false }
+            deleteConfirmLoan != null -> { deleteConfirmLoan = null; confirmLoanDeleteFinal = false }
+            editingPayment != null -> editingPayment = null
+            paymentFor != null -> paymentFor = null
+            showAddLoan || editLoan != null -> { showAddLoan = false; editLoan = null }
+            detailLoan != null -> detailLoan = null
+            page in listOf(AppPage.Calculators, AppPage.Statistics, AppPage.Backup, AppPage.PaddySeasons) -> page = AppPage.More
+            page == AppPage.More -> page = AppPage.Home
+            page != AppPage.Home -> page = AppPage.Home
+            else -> showExitConfirmation = true
+        }
+    }
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     var backupStatus by remember { mutableStateOf("Device backup will be checked automatically.") }
     val notificationPermission = rememberLauncherForActivityResult(
@@ -325,7 +353,7 @@ private fun LoanManagerApp() {
         }
     }
 
-    MaterialTheme(colorScheme = appColorScheme, typography = modernTypography(appColorScheme)) {
+    MaterialTheme(colorScheme = appColorScheme, typography = modernTypography()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = WindowInsets.safeDrawing,
@@ -333,30 +361,52 @@ private fun LoanManagerApp() {
             topBar = {
                 TopAppBar(
                     colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary
+                        containerColor = MaterialTheme.colorScheme.surface
                     ),
                     title = {
-                        Column {
-                            Text("FundNiti", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-                            Text(page.label, style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onPrimary)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(id = R.drawable.ic_app_logo),
+                                contentDescription = "FundNiti logo",
+                                modifier = Modifier.size(38.dp)
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text("FundNiti", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.titleMedium)
+                                Text(page.label, style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     },
                     actions = {
-                        IconButton(onClick = {
-                            themeMode = when (themeMode) {
-                                "SYSTEM" -> "LIGHT"
-                                "LIGHT" -> "DARK"
-                                else -> "SYSTEM"
-                            }
-                            preferences.edit().putString("theme_mode", themeMode).apply()
-                        }) {
+                        IconButton(onClick = { themeMenuExpanded = true }) {
                             val themeIcon = when (themeMode) {
                                 "LIGHT" -> Icons.Filled.LightMode
                                 "DARK" -> Icons.Filled.DarkMode
                                 else -> Icons.Filled.BrightnessAuto
                             }
-                            Icon(themeIcon, contentDescription = "Theme: ${themeMode.lowercase()}. Tap to change.")
+                            Icon(themeIcon, tint = MaterialTheme.colorScheme.primary,
+                                contentDescription = "Appearance: ${themeMode.lowercase()}")
+                        }
+                        DropdownMenu(expanded = themeMenuExpanded, onDismissRequest = { themeMenuExpanded = false }) {
+                            listOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark").forEach { (mode, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    leadingIcon = {
+                                        Icon(when (mode) {
+                                            "SYSTEM" -> Icons.Filled.BrightnessAuto
+                                            "LIGHT" -> Icons.Filled.LightMode
+                                            else -> Icons.Filled.DarkMode
+                                        }, contentDescription = null)
+                                    },
+                                    trailingIcon = if (themeMode == mode) ({ Text("✓", color = MaterialTheme.colorScheme.primary) }) else null,
+                                    onClick = {
+                                        themeMode = mode
+                                        preferences.edit().putString("theme_mode", mode).apply()
+                                        themeMenuExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 )
@@ -373,7 +423,6 @@ private fun LoanManagerApp() {
                             )
                         }
                     }
-                    Text("Developed with ♥️ Aravind", modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(vertical = 5.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
@@ -587,6 +636,18 @@ private fun LoanManagerApp() {
                 }
             }) { Text(if (confirmLoanDeleteFinal) "Delete permanently" else "Continue") } },
             dismissButton = { TextButton(onClick = { deleteConfirmLoan = null; confirmLoanDeleteFinal = false }) { Text("Cancel") } }
+        )
+    }
+    if (showExitConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmation = false },
+            title = { Text("Close FundNiti?") },
+            text = { Text("Your saved records are safe. You can return to this screen anytime.") },
+            confirmButton = { TextButton(onClick = {
+                showExitConfirmation = false
+                (context as? Activity)?.finish()
+            }) { Text("Close app") } },
+            dismissButton = { TextButton(onClick = { showExitConfirmation = false }) { Text("Stay") } }
         )
     }
     if (pinConfigured && appLocked) {
@@ -936,20 +997,20 @@ private fun DashboardScreen(
     onViewDetails: (LoanEntity) -> Unit, payments: List<PaymentEntity>
 ) {
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Spacer(Modifier.height(4.dp)); Text("Your money, clearly tracked.", style = MaterialTheme.typography.bodyLarge) }
+        item { Spacer(Modifier.height(4.dp)); Text("A clearer view of your money", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth()) {
+                shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp)) {
-                    Text("TOTAL OUTSTANDING", color = androidx.compose.ui.graphics.Color.White,
-                        style = MaterialTheme.typography.labelMedium)
+                    Text("TOTAL OUTSTANDING", color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
-                    Text(money(outstanding), color = androidx.compose.ui.graphics.Color.White,
+                    Text(money(outstanding), color = MaterialTheme.colorScheme.onPrimary,
                         style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                    Text(amountInWords(outstanding), color = Color(0xFFDDF5E9),
+                    Text(amountInWords(outstanding), color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.78f),
                         style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.height(8.dp))
-                    Text("${loans.size} active loan records", color = androidx.compose.ui.graphics.Color.White)
+                    Text("${loans.size} active loan records", color = MaterialTheme.colorScheme.onPrimary)
                 }
             }
         }
@@ -971,7 +1032,6 @@ private fun DashboardScreen(
         item { Button(onClick = onViewLoans, modifier = Modifier.fillMaxWidth()) { Text("View all loans") } }
         item { Text("Interest is worked out each month on the original amount.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        item { Text("Developed with ♥️ Aravind", modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 
@@ -1009,7 +1069,7 @@ private fun LoanCard(
         modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -1657,7 +1717,7 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
             val combinedTotal = lentTotal + borrowedTotal
             Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
                 shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("Combined outstanding across ${records.size} loan(s): ${money(combinedTotal)}",
@@ -1667,7 +1727,7 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
                     Text("You lent · ${money(lentTotal)}",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     Text("You borrowed / borrowed for someone · ${money(borrowedTotal)}",
-                        style = MaterialTheme.typography.bodySmall, color = Color(0xFF4C86D9))
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                     Text("Total = outstanding balances of this person's unique loan records, split by each record's Lent/Borrowed type.",
                         style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -1768,9 +1828,9 @@ private fun StatisticsScreen(
         val totalInterestNow = loans.sumOf { accruedInterest(it.principal, it.monthlyRate, it.startDate, System.currentTimeMillis()) }
         GlassPanel(title = "How the balance is calculated", subtitle = "Principal is the original amount. Interest is added using each loan's saved rate and dates.") {
             DetailLine("Total principal", money(principal))
-            ComparisonBar("Principal", principal, maxOf(principal, totalInterestNow, 1.0), Color(0xFF16866B))
+            ComparisonBar("Principal", principal, maxOf(principal, totalInterestNow, 1.0), MaterialTheme.colorScheme.primary)
             DetailLine("Interest added", money(totalInterestNow))
-            ComparisonBar("Interest", totalInterestNow, maxOf(principal, totalInterestNow, 1.0), Color(0xFF5B8DE5))
+            ComparisonBar("Interest", totalInterestNow, maxOf(principal, totalInterestNow, 1.0), MaterialTheme.colorScheme.tertiary)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard("Money lent", money(lentBalance), Modifier.weight(1f))
@@ -1781,8 +1841,8 @@ private fun StatisticsScreen(
                 horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                 PortfolioDonut(lentBalance, borrowedBalance, Modifier.size(132.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.weight(1f)) {
-                    LegendRow("Money lent", Color(0xFF16866B), money(lentBalance))
-                    LegendRow("Money borrowed", Color(0xFF5B8DE5), money(borrowedBalance))
+                    LegendRow("Money lent", MaterialTheme.colorScheme.primary, money(lentBalance))
+                    LegendRow("Money borrowed", MaterialTheme.colorScheme.tertiary, money(borrowedBalance))
                 }
             }
         }
@@ -1798,16 +1858,16 @@ private fun StatisticsScreen(
         }
         GlassPanel(title = "Loan reminders", subtitle = "Loans that are due soon, overdue, or have no reminder date") {
             HealthDonut(currentCount, overdueCount, noDueDateCount, Modifier.size(136.dp))
-            LegendRow("Current / not yet due", Color(0xFF16866B), "$currentCount loans")
-            LegendRow("Overdue", Color(0xFFE59B42), "$overdueCount loans")
-            LegendRow("No due date set", Color(0xFF5B8DE5), "$noDueDateCount loans")
+            LegendRow("Current / not yet due", MaterialTheme.colorScheme.primary, "$currentCount loans")
+            LegendRow("Overdue", MaterialTheme.colorScheme.secondary, "$overdueCount loans")
+            LegendRow("No due date set", MaterialTheme.colorScheme.tertiary, "$noDueDateCount loans")
             Text("A late payment is not automatically marked as a default.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         GlassPanel(title = "Money lent and borrowed each month", subtitle = "Original amount recorded each month") {
             GroupedDirectionChart(grouped)
-            LegendRow("You lent", Color(0xFF16866B), "Lent principal")
-            LegendRow("You borrowed", Color(0xFF5B8DE5), "Borrowed principal")
+            LegendRow("You lent", MaterialTheme.colorScheme.primary, "Lent principal")
+            LegendRow("You borrowed", MaterialTheme.colorScheme.tertiary, "Borrowed principal")
         }
         GlassPanel(title = "New loans and payments", subtitle = "Compare new loan amounts with payments received or made") {
             CashFlowBridgeChart(originationsVsPayments)
@@ -1815,8 +1875,8 @@ private fun StatisticsScreen(
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         GlassPanel(title = "Money lent vs money borrowed", subtitle = "Compare amounts still due") {
-            ComparisonBar("Lent", lentBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF16866B))
-            ComparisonBar("Borrowed", borrowedBalance, maxOf(lentBalance, borrowedBalance), Color(0xFF5B8DE5))
+            ComparisonBar("Lent", lentBalance, maxOf(lentBalance, borrowedBalance), MaterialTheme.colorScheme.primary)
+            ComparisonBar("Borrowed", borrowedBalance, maxOf(lentBalance, borrowedBalance), MaterialTheme.colorScheme.tertiary)
         }
         GlassPanel(title = "Repayment activity", subtitle = "Payments recorded in the last 6 months") {
             PaymentBars(paymentBars)
@@ -1836,8 +1896,8 @@ private fun StatisticsScreen(
                 DetailLine("Interest added so far", money(personInterest))
                 DetailLine("Amount still due", money(personLoans.sumOf(balance)))
                 val max = maxOf(personPrincipal, personInterest, 1.0)
-                ComparisonBar("Principal", personPrincipal, max, Color(0xFF16866B))
-                ComparisonBar("Interest", personInterest, max, Color(0xFF5B8DE5))
+                ComparisonBar("Principal", personPrincipal, max, MaterialTheme.colorScheme.primary)
+                ComparisonBar("Interest", personInterest, max, MaterialTheme.colorScheme.tertiary)
             }
         }
         Text("Key metrics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -1862,7 +1922,7 @@ private fun GlassPanel(title: String, subtitle: String, content: @Composable and
         modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1875,16 +1935,17 @@ private fun GlassPanel(title: String, subtitle: String, content: @Composable and
 @Composable
 private fun PortfolioDonut(lent: Double, borrowed: Double, modifier: Modifier = Modifier) {
     val total = lent + borrowed
+    val colors = MaterialTheme.colorScheme
     Canvas(modifier) {
         val stroke = 24.dp.toPx()
         val diameter = size.minDimension - stroke
         val topLeft = androidx.compose.ui.geometry.Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
         val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
-        drawArc(Color(0xFFE4ECE8), -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+        drawArc(colors.surfaceVariant, -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
         if (total > 0.0) {
             val lentSweep = (lent / total * 360.0).toFloat()
-            drawArc(Color(0xFF16866B), -90f, lentSweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
-            drawArc(Color(0xFF5B8DE5), -90f + lentSweep, (borrowed / total * 360.0).toFloat(), false,
+            drawArc(colors.primary, -90f, lentSweep, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+            drawArc(colors.tertiary, -90f + lentSweep, (borrowed / total * 360.0).toFloat(), false,
                 topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
         }
     }
@@ -1909,7 +1970,7 @@ private fun ComparisonBar(label: String, value: Double, maxValue: Double, color:
             Text(money(value), style = MaterialTheme.typography.labelLarge)
         }
         androidx.compose.foundation.layout.Box(
-            Modifier.fillMaxWidth().height(12.dp).background(Color(0xFFE6EEEA), RoundedCornerShape(50))
+            Modifier.fillMaxWidth().height(12.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))
         ) {
             val fraction = if (maxValue <= 0.0) 0f else (value / maxValue).toFloat().coerceIn(0f, 1f)
             androidx.compose.foundation.layout.Box(
@@ -1933,7 +1994,7 @@ private fun PaymentBars(data: List<Pair<String, Double>>) {
                 val fraction = if (maxValue <= 0.0) 0.025f else (amount / maxValue).toFloat().coerceIn(0.025f, 1f)
                 androidx.compose.foundation.layout.Box(
                     Modifier.fillMaxWidth(0.72f).fillMaxHeight(fraction).background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF77CDB2), Color(0xFF126B55))),
+                        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.72f), MaterialTheme.colorScheme.primary)),
                         RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)
                     )
                 )
@@ -1953,7 +2014,7 @@ private fun DataNeededPanel(title: String, description: String) {
                 Icon(Icons.Filled.BarChart, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             }
-            Text("Needs more data", style = MaterialTheme.typography.labelMedium, color = Color(0xFF9A6B20))
+            Text("Needs more data", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -1976,10 +2037,10 @@ private fun StackedPaymentChart(data: List<Triple<String, Double, Double>>) {
                             if (maxValue > 0.0) {
                                 androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()
                                     .height((100f * (interestPart / maxValue).toFloat()).dp)
-                                    .background(Color(0xFF5B8DE5)))
+                                    .background(MaterialTheme.colorScheme.tertiary))
                                 androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth()
                                     .height((100f * (principalPart / maxValue).toFloat()).dp)
-                                    .background(Color(0xFF16866B)))
+                                    .background(MaterialTheme.colorScheme.primary))
                             }
                         }
                     }
@@ -1989,8 +2050,8 @@ private fun StackedPaymentChart(data: List<Triple<String, Double, Double>>) {
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            LegendRow("Principal estimate", Color(0xFF16866B), "Allocated")
-            LegendRow("Interest estimate", Color(0xFF5B8DE5), "Allocated")
+            LegendRow("Principal estimate", MaterialTheme.colorScheme.primary, "Allocated")
+            LegendRow("Interest estimate", MaterialTheme.colorScheme.tertiary, "Allocated")
         }
     }
 }
@@ -1998,6 +2059,7 @@ private fun StackedPaymentChart(data: List<Triple<String, Double, Double>>) {
 @Composable
 private fun TrendLineChart(data: List<Pair<String, Double>>) {
     val maxValue = data.maxOfOrNull { it.second } ?: 0.0
+    val colors = MaterialTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Canvas(Modifier.fillMaxWidth().height(150.dp)) {
             if (data.isNotEmpty()) {
@@ -2011,11 +2073,11 @@ private fun TrendLineChart(data: List<Pair<String, Double>>) {
                 }
                 for (step in 0..3) {
                     val y = pad + h * step / 3f
-                    drawLine(Color(0xFFE3ECE7), androidx.compose.ui.geometry.Offset(pad, y),
+                    drawLine(colors.outlineVariant, androidx.compose.ui.geometry.Offset(pad, y),
                         androidx.compose.ui.geometry.Offset(size.width - pad, y), strokeWidth = 1.dp.toPx())
                 }
-                pts.zipWithNext().forEach { (a, b) -> drawLine(Color(0xFF16866B), a, b, 3.dp.toPx(), cap = StrokeCap.Round) }
-                pts.forEach { drawCircle(Color(0xFF16866B), 4.dp.toPx(), it) }
+                pts.zipWithNext().forEach { (a, b) -> drawLine(colors.primary, a, b, 3.dp.toPx(), cap = StrokeCap.Round) }
+                pts.forEach { drawCircle(colors.primary, 4.dp.toPx(), it) }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -2029,19 +2091,20 @@ private fun TrendLineChart(data: List<Pair<String, Double>>) {
 @Composable
 private fun HealthDonut(current: Int, overdue: Int, noDueDate: Int, modifier: Modifier = Modifier) {
     val total = current + overdue + noDueDate
+    val colors = MaterialTheme.colorScheme
     Canvas(modifier) {
         val stroke = 24.dp.toPx()
         val diameter = size.minDimension - stroke
         val topLeft = androidx.compose.ui.geometry.Offset((size.width - diameter) / 2f, (size.height - diameter) / 2f)
         val arcSize = androidx.compose.ui.geometry.Size(diameter, diameter)
-        drawArc(Color(0xFFE4ECE8), -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+        drawArc(colors.surfaceVariant, -90f, 360f, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
         if (total > 0) {
             val a = current.toFloat() / total * 360f
             val b = overdue.toFloat() / total * 360f
             val c = noDueDate.toFloat() / total * 360f
-            drawArc(Color(0xFF16866B), -90f, a, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
-            drawArc(Color(0xFFE59B42), -90f + a, b, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
-            drawArc(Color(0xFF5B8DE5), -90f + a + b, c, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+            drawArc(colors.primary, -90f, a, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+            drawArc(colors.secondary, -90f + a, b, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
+            drawArc(colors.tertiary, -90f + a + b, c, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Butt))
         }
     }
 }
@@ -2057,9 +2120,9 @@ private fun GroupedDirectionChart(data: List<Triple<String, Double, Double>>) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Bottom) {
                     val h1 = if (maxValue <= 0.0) 2.dp else (86f * (lent / maxValue).toFloat()).dp
                     val h2 = if (maxValue <= 0.0) 2.dp else (86f * (borrowed / maxValue).toFloat()).dp
-                    androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h1).background(Color(0xFF16866B), RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
+                    androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h1).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
                     Spacer(Modifier.width(3.dp))
-                    androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h2).background(Color(0xFF5B8DE5), RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
+                    androidx.compose.foundation.layout.Box(Modifier.width(12.dp).height(h2).background(MaterialTheme.colorScheme.tertiary, RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)))
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(label, style = MaterialTheme.typography.labelSmall)
@@ -2079,19 +2142,19 @@ private fun CashFlowBridgeChart(data: List<Triple<String, Double, Double>>) {
                 Text(shortMoney(originations), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 val h1 = if (maxValue <= 0.0) 2.dp else (78f * (originations / maxValue).toFloat()).dp
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.62f).height(h1)
-                    .background(Color(0xFF16866B), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
                 Spacer(Modifier.height(4.dp))
                 val h2 = if (maxValue <= 0.0) 2.dp else (78f * (repayments / maxValue).toFloat()).dp
                 androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(0.62f).height(h2)
-                    .background(Color(0xFFE59B42), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
+                    .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)))
                 Spacer(Modifier.height(4.dp))
                 Text(label, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        LegendRow("Originations", Color(0xFF16866B), "New principal")
-        LegendRow("Repayments", Color(0xFFE59B42), "Recorded payments")
+        LegendRow("Originations", MaterialTheme.colorScheme.primary, "New principal")
+        LegendRow("Repayments", MaterialTheme.colorScheme.secondary, "Recorded payments")
     }
 }
 
@@ -2307,7 +2370,7 @@ private fun BackupScreen(
         Text("No login, cloud database, or external server. Back up all records to the Android folder in one tap, recover a saved device snapshot, or export an encrypted backup file.")
         Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
             shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Icons.Filled.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Back up records", style = MaterialTheme.typography.titleMedium)
@@ -2347,7 +2410,7 @@ private fun BackupScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Icons.Filled.AccountBalance, contentDescription = null, tint = Color(0xFF126B55), modifier = Modifier.size(30.dp))
+                    Icon(Icons.Filled.AccountBalance, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
                     Column {
                         Text("About FundNiti", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("Personal lending, clearly organised", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -2357,8 +2420,8 @@ private fun BackupScreen(
                 Text("Interest method", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text("Simple interest on the original principal at the fixed monthly rate. Full monthly anniversary periods receive the full monthly rate; partial periods are prorated by elapsed calendar days divided by the actual days in that monthly period. Recorded payments are deducted from accrued interest plus principal in the displayed outstanding balance.", style = MaterialTheme.typography.bodySmall)
                 Text("Privacy by design", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text("No account, external server, or cloud sync is required. FundNiti keeps a portable JSON snapshot in Android/media/com.rath0darya.loanmanager/Lendora/backup and restores it on a fresh install when the local database is empty. This automatic snapshot is not encrypted so reinstalling can read it; protect the file because it contains financial records. Manual encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
-                Text("FundNiti · Native Android · Kotlin + Jetpack Compose · Version 1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No account, external server, or cloud sync is required. FundNiti keeps a portable JSON snapshot in Android/media/com.fundniti/Lendora/backup and restores it on a fresh install when the local database is empty. This automatic snapshot is not encrypted so reinstalling can read it; protect the file because it contains financial records. Manual encrypted exports use this installation's Android Keystore key and generally cannot be restored after reinstalling or on another device.", style = MaterialTheme.typography.bodySmall)
+                Text("FundNiti · Native Android · Kotlin + Jetpack Compose · Version 1.1.0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -2518,7 +2581,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
         modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -2538,7 +2601,7 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 private fun EmptyState(title: String, message: String) {
     Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
         shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
         Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Filled.AccountBalance, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(8.dp))

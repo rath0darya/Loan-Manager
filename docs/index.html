@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#126b55">
+  <meta name="theme-color" content="#0b3b2c">
   <meta name="description" content="FundNiti is an offline-first Android loan ledger for personal lending, repayments, interest, and local backups.">
   <title>FundNiti — Private by design</title>
   <style>
@@ -11,7 +11,7 @@
     *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     a{color:var(--green);text-decoration:none}a:hover{text-decoration:underline}.wrap{width:min(1080px,calc(100% - 32px));margin:auto}
     .hero{padding:54px 0 38px;background:radial-gradient(ellipse at 90% 0%,rgba(197,155,67,.22),transparent 35%),linear-gradient(135deg,#e0f1e9,#f7faf8 70%);border-bottom:1px solid var(--line)}
-    .brand{display:inline-flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.02em}.mark{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:var(--green);color:#fff;font-size:22px;box-shadow:0 8px 20px #126b5533}
+    .brand{display:inline-flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.02em}.mark{display:grid;place-items:center;width:48px;height:48px;border-radius:16px;background:#0b3b2c;box-shadow:0 8px 20px #126b5533}.mark svg{width:40px;height:40px;fill:#eaf7ef}.mark svg .gold{fill:#eac46f}
     h1{font-size:clamp(2.3rem,6vw,4.3rem);line-height:1.06;letter-spacing:-.045em;margin:26px 0 14px;max-width:760px}h1 span{color:var(--green)}.lead{font-size:clamp(1.05rem,2.2vw,1.25rem);color:var(--muted);max-width:720px}
     .actions{display:flex;flex-wrap:wrap;gap:12px;margin:26px 0 20px}.btn{display:inline-flex;align-items:center;justify-content:center;padding:11px 17px;border-radius:12px;font-weight:750;border:1px solid var(--green)}.primary{background:var(--green);color:#fff}.secondary{background:transparent}
     .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}.chip{font-size:.84rem;font-weight:700;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 11px}
@@ -24,15 +24,15 @@
     footer{border-top:1px solid var(--line);padding:26px 0;color:var(--muted);text-align:center}
     @media(max-width:760px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.split{grid-template-columns:1fr}.hero{padding-top:34px}}
     @media(max-width:480px){.grid{grid-template-columns:1fr}.wrap{width:min(100% - 24px,1080px)}.card,.panel{padding:17px}.actions .btn{width:100%}}
-    @media(prefers-color-scheme:dark){:root{--bg:#101714;--panel:#171f1b;--ink:#e7f1ec;--muted:#a8bbb2;--green:#83d6bb;--green2:#263b32;--line:#2d4037;--shadow:0 14px 40px #0003}.hero{background:radial-gradient(ellipse at 90% 0%,#c59b4320,transparent 35%),linear-gradient(135deg,#172c23,#101714 75%)}.mark{background:#83d6bb;color:#10251d}.primary{color:#10251d}.chip{background:#171f1b}.note{background:#171f1b}a{color:var(--green)}}
+    @media(prefers-color-scheme:dark){:root{--bg:#101714;--panel:#171f1b;--ink:#e7f1ec;--muted:#a8bbb2;--green:#83d6bb;--green2:#263b32;--line:#2d4037;--shadow:0 14px 40px #0003}.hero{background:radial-gradient(ellipse at 90% 0%,#c59b4320,transparent 35%),linear-gradient(135deg,#172c23,#101714 75%)}.mark{background:#0b3b2c}.primary{color:#10251d}.chip{background:#171f1b}.note{background:#171f1b}a{color:var(--green)}}
   </style>
 </head>
 <body>
 <header class="hero"><div class="wrap">
-  <div class="brand"><span class="mark" aria-hidden="true">₹</span><span>FundNiti</span></div>
+  <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M24 8 37 13v10c0 8-6 14-13 18-7-4-13-10-13-18V13z"/><path d="M16 26h4v5h-4zm6-5h4v10h-4zm6-5h4v15h-4z"/><path class="gold" d="M16 17h5v3h-2v2h4v3h-7v-3h1v-2h-1z"/></svg></span><span>FundNiti</span></div>
   <h1>Private by design.<br><span>Clear by nature.</span></h1>
   <p class="lead">An offline-first Android loan ledger for money lent, money borrowed, and every repayment in between. Keep your records organised on your device—without a cloud account or required backend.</p>
-  <div class="actions"><a class="btn primary" href="../Download/LoanManager.apk">Get the Android APK</a><a class="btn secondary" href="https://github.com/rath0darya/Loan-Manager/actions">Build status &amp; releases ↗</a></div>
+  <div class="actions"><a class="btn primary" href="https://github.com/rath0darya/Loan-Manager/releases/latest">Get the Android APK</a><a class="btn secondary" href="https://github.com/rath0darya/Loan-Manager/releases">All releases ↗</a></div>
   <div class="chips"><span class="chip">Android · Kotlin</span><span class="chip">Jetpack Compose</span><span class="chip">Offline-first</span><span class="chip">Room database</span><span class="chip">No backend required</span></div>
 </div></header>
 <main class="wrap">
@@ -47,7 +47,7 @@
     </div>
   </section>
   <section class="section split">
-    <div class="panel"><h3>🎨 Designed for comfort</h3><ul><li>System, Light, and Dark appearance modes</li><li>Emerald accents with warm gold highlights</li><li>Adaptive Android colours where supported</li><li>Native Compose and Material 3 components</li></ul></div>
+    <div class="panel"><h3>🎨 Designed for comfort</h3><ul><li>System, Light, and Dark appearance modes</li><li>Emerald accents with warm gold highlights</li><li>A consistent palette across all appearance modes</li><li>New shield-and-growth FundNiti app identity</li><li>Native Compose and Material 3 components</li></ul></div>
     <div class="panel"><h3>🔐 Your data, your device</h3><ul><li>Local Room database for app records</li><li>No account or network backend required</li><li>Manual backup exports use AES-GCM encryption and Android Keystore</li><li>Automatic shared-Downloads JSON backup is unencrypted—protect it as sensitive financial data</li></ul></div>
   </section>
   <section class="section"><h2>How interest is calculated</h2><div class="panel"><p>FundNiti uses <strong>simple interest on the original principal</strong>. Interest is not compounded, and repayments do not reduce the interest calculation base.</p><p><code>Monthly interest = Principal × Monthly rate ÷ 100</code></p><p>For a partial monthly anniversary period, the app prorates the monthly interest by elapsed days divided by the actual number of days in that period.</p><p class="note">Example: ₹10,000 at 2% per month earns ₹200 for a full monthly period. For 10 days of a 30-day period, the prorated amount is ₹66.67. Confirm the applicable method against your agreement before settlement.</p></div></section>
@@ -55,9 +55,10 @@
     <details><summary>Where is the automatic backup stored?</summary><p><code>Download/FundNiti/Backup/Lendora-Data.json</code></p></details>
     <details><summary>Is the automatic JSON backup encrypted?</summary><p>No. The automatic snapshot is unencrypted and each backup replaces the previous snapshot with the latest full database state. It contains sensitive financial records; protect your phone and do not share the file.</p></details>
     <details><summary>Can encrypted manual backups move to another phone?</summary><p>Manual <code>.lendora</code> exports are encrypted using Android Keystore and are generally tied to the original installation/device key. Keep an additional backup copy and verify your recovery needs before changing devices.</p></details>
+    <details><summary>What happens when upgrading from the older app ID?</summary><p><code>com.fundniti</code> installs separately from the older <code>com.rath0darya.loanmanager</code> app. Keep its portable <code>Lendora-Data.json</code> backup and restore it in FundNiti; encrypted exports remain tied to their original installation key.</p></details>
   </section>
-  <section class="section"><h2>Build from source</h2><div class="panel"><ol><li>Clone this repository and open it in Android Studio.</li><li>Use JDK 17 and install the Android SDK required by the project.</li><li>Allow Gradle to sync, then run on a device or emulator.</li></ol><p><a href="https://github.com/rath0darya/Loan-Manager">Source repository ↗</a> · <a href="https://github.com/rath0darya/Loan-Manager/actions">GitHub Actions ↗</a> · <a href="../Download/">APK directory ↗</a></p></div></section>
-  <section class="section"><h2>App details</h2><div class="table-wrap"><table><tbody><tr><th scope="row">Application ID</th><td><code>com.rath0darya.loanmanager</code></td></tr><tr><th scope="row">Platform</th><td>Native Android · Kotlin</td></tr><tr><th scope="row">Interface</th><td>Jetpack Compose · Material 3</td></tr><tr><th scope="row">Storage</th><td>On-device Room database</td></tr><tr><th scope="row">Backend</th><td>None required</td></tr></tbody></table></div></section>
+  <section class="section"><h2>Build from source</h2><div class="panel"><ol><li>Clone this repository and open it in Android Studio.</li><li>Use JDK 17 and install the Android SDK required by the project.</li><li>Allow Gradle to sync, then run on a device or emulator.</li></ol><p><a href="https://github.com/rath0darya/Loan-Manager">Source repository ↗</a> · <a href="https://github.com/rath0darya/Loan-Manager/actions">GitHub Actions ↗</a> · <a href="https://github.com/rath0darya/Loan-Manager/releases/latest">Latest APK release ↗</a></p></div></section>
+  <section class="section"><h2>App details</h2><div class="table-wrap"><table><tbody><tr><th scope="row">Application ID</th><td><code>com.fundniti</code></td></tr><tr><th scope="row">Platform</th><td>Native Android · Kotlin</td></tr><tr><th scope="row">Interface</th><td>Jetpack Compose · Material 3</td></tr><tr><th scope="row">Storage</th><td>On-device Room database</td></tr><tr><th scope="row">Backend</th><td>None required</td></tr></tbody></table></div></section>
 </main>
 <footer><div class="wrap"><strong>FundNiti</strong> — know what is lent, what is owed, and what comes next.<br><small>For record-keeping only; not financial or legal advice.</small></div></footer>
 </body>

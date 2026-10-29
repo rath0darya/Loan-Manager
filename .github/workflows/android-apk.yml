@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build and publish FundNiti APK
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: android-apk-${{ github.ref }}
+  group: android-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,8 +27,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Keep the debug signing certificate stable between CI builds so updates do not fail
-      # with INSTALL_FAILED_UPDATE_INCOMPATIBLE just because a fresh runner generated a new key.
       - name: Restore stable debug signing key
         uses: actions/cache@v4
         with:
@@ -40,31 +38,30 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Build debug APK
+      - name: Build APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Place APK in repository Download folder
+      - name: Prepare versioned release asset
+        id: release
         run: |
-          mkdir -p Download
-          cp app/build/outputs/apk/debug/app-debug.apk Download/LoanManager.apk
+          version_name="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          short_sha="${GITHUB_SHA::7}"
+          release_tag="fundniti-${version_name}-${short_sha}"
+          apk_name="FundNiti-${version_name}-${short_sha}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk_name"
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "apk=$apk_name" >> "$GITHUB_OUTPUT"
+          echo "version=$version_name" >> "$GITHUB_OUTPUT"
 
-      - name: Commit APK to repository
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          # Do not publish an APK built from old source if main has newer code.
-          if git diff --name-only "$GITHUB_SHA" origin/main | grep -v '^Download/'; then
-            echo "Newer source code is already on main; skipping this stale APK. The newer workflow will publish its build."
-            exit 0
-          fi
-          git reset --hard origin/main
-          mkdir -p Download
-          cp app/build/outputs/apk/debug/app-debug.apk Download/LoanManager.apk
-          git add Download/LoanManager.apk
-          if git diff --cached --quiet; then
-            echo "APK unchanged; no commit needed."
-          else
-            git commit -m "Build Loan Manager APK"
-            git push origin HEAD:main
-          fi
+      - name: Publish APK to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          make_latest: true
+          name: FundNiti ${{ steps.release.outputs.version }} (${{ github.sha }})
+          body: |
+            FundNiti Android app build from commit ${{ github.sha }}.
+
+            Install the attached APK on Android 8.0 (API 26) or later.
+          files: ${{ steps.release.outputs.apk }}
+          generate_release_notes: true

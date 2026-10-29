@@ -1,4 +1,4 @@
-package com.rath0darya.loanmanager
+package com.fundniti
 
 import android.content.Context
 import android.content.ContentValues
@@ -49,7 +49,7 @@ object EncryptedBackup {
             return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
         } catch (e: Exception) {
             throw IOException(
-                "This encrypted backup cannot be opened with this installation's key. If this is from a reinstall or another phone, choose the portable Lendora-Data.json backup from Android/media/com.rath0darya.loanmanager/Lendora/backup instead.",
+                "This encrypted backup cannot be opened with this installation's key. If this is from a reinstall or another phone, choose the portable Lendora-Data.json backup from Android/media/com.fundniti/Lendora/backup instead.",
                 e
             )
         }

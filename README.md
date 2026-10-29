@@ -8,7 +8,7 @@ An elegant, offline-first Android loan ledger for money lent, money borrowed, an
 
 [**Browse the responsive HTML/CSS landing page ↗**](docs/index.html)
 
-[**Download APK**](Download/LoanManager.apk) · [**View build status**](https://github.com/rath0darya/Loan-Manager/actions) · [**Browse source**](https://github.com/rath0darya/Loan-Manager)
+[**Download latest release**](https://github.com/rath0darya/Loan-Manager/releases/latest) · [**View build status**](https://github.com/rath0darya/Loan-Manager/actions) · [**Browse source**](https://github.com/rath0darya/Loan-Manager)
 
 </div>
 
@@ -63,8 +63,9 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 
 ## 🛠️ Download or build
 
-- **Install the APK:** [Download LoanManager.apk](Download/LoanManager.apk)
+- **Install the APK:** [Get the latest FundNiti release](https://github.com/rath0darya/Loan-Manager/releases/latest)
 - **Build status:** [Latest GitHub Actions runs](https://github.com/rath0darya/Loan-Manager/actions)
+- Each successful main branch build publishes a versioned APK in GitHub Releases. The existing `Download/LoanManager.apk` file is retained unchanged.
 - **Build from source:** Open the repository in Android Studio with JDK 17 and the Android SDK required by the project, sync Gradle, then run on a device or emulator.
 
 ## 🧱 Technology
@@ -78,8 +79,10 @@ FundNiti uses **simple interest on the original principal**. Interest is not com
 ## 📱 App details
 
 - **App name:** FundNiti
-- **Application ID:** `com.rath0darya.loanmanager`
+- **Application ID:** `com.fundniti`
+- **Current version:** `1.1.0`
 - **Data storage:** On-device Room database
+- **Upgrade note:** `com.fundniti` installs as a separate Android app from earlier `com.rath0darya.loanmanager` builds. Keep the automatic `Lendora-Data.json` snapshot and restore it in the new app; encrypted `.lendora` exports are tied to the installation key.
 - **Network backend:** None required
 - **Interest method:** Fixed monthly simple interest with daily proration for partial periods
 
