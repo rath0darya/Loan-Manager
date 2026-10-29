@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths-ignore:
       - "Download/**"
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -41,22 +43,29 @@ jobs:
       - name: Build APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Prepare versioned release asset
+      - name: Prepare versioned APK
         id: release
         run: |
-          version_name="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          version_name="$(sed -n 's/.*versionName = "\\([^"]*\\)".*/\\1/p' app/build.gradle.kts | head -n 1)"
           short_sha="${GITHUB_SHA::7}"
-          release_tag="fundniti-${version_name}-${short_sha}"
           apk_name="FundNiti-${version_name}-${short_sha}.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$apk_name"
-          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "apk=$apk_name" >> "$GITHUB_OUTPUT"
           echo "version=$version_name" >> "$GITHUB_OUTPUT"
 
+      - name: Upload APK build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FundNiti-${{ steps.release.outputs.version }}-${{ github.sha }}
+          path: ${{ steps.release.outputs.apk }}
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Publish APK to GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release.outputs.tag }}
+          tag_name: fundniti-${{ steps.release.outputs.version }}-${{ github.sha }}
           make_latest: true
           name: FundNiti ${{ steps.release.outputs.version }} (${{ github.sha }})
           body: |
