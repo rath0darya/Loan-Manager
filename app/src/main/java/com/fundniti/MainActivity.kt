@@ -237,6 +237,7 @@ private fun LoanManagerApp() {
     var editLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var paymentFor by remember { mutableStateOf<LoanEntity?>(null) }
     var editingPayment by remember { mutableStateOf<PaymentEntity?>(null) }
+    var reopenStatementAfterPayment by remember { mutableStateOf(false) }
     var deleteConfirmPayment by remember { mutableStateOf<PaymentEntity?>(null) }
     var detailLoan by remember { mutableStateOf<LoanEntity?>(null) }
     var deleteConfirmLoan by remember { mutableStateOf<LoanEntity?>(null) }
@@ -451,7 +452,7 @@ private fun LoanManagerApp() {
                 AppPage.People -> PeopleScreen(Modifier.padding(padding), loans, ::balance)
                 AppPage.Calculators -> CalculatorsScreen(Modifier.padding(padding))
                 AppPage.Statistics -> StatisticsScreen(
-                    Modifier.padding(padding), loans, payments, ::balance, totalOutstanding, totalPrincipal
+                    Modifier.padding(padding), loans, payments, ::balance, totalOutstanding, totalPrincipal, paddyRecords
                 )
                 AppPage.PaddySeasons -> PaddySeasonScreen(
                     modifier = Modifier.padding(padding), records = paddyRecords,
@@ -575,12 +576,16 @@ private fun LoanManagerApp() {
         )
     }
     paymentFor?.let { loan ->
-        PaymentDialog(existing = null, onDismiss = { paymentFor = null }, onSave = { amount, paidAt, method, reference, note ->
+        PaymentDialog(existing = null, onDismiss = {
+            paymentFor = null
+            if (reopenStatementAfterPayment) { detailLoan = loan; reopenStatementAfterPayment = false }
+        }, onSave = { amount, paidAt, method, reference, note ->
             scope.launch {
                 dao.addPayment(PaymentEntity(loanId = loan.id, amount = amount,
                     paidAt = paidAt, note = note.trim(), paymentMethod = method, referenceNumber = reference.trim()))
                 withContext(Dispatchers.IO) { DurableBackup.writeAutomatic(context, createBackupJson(dao)) }
                 paymentFor = null
+                if (reopenStatementAfterPayment) { detailLoan = loan; reopenStatementAfterPayment = false }
                 snackbarHostState.showSnackbar("Payment recorded")
             }
         })
@@ -600,6 +605,7 @@ private fun LoanManagerApp() {
         LoanDetailsDialog(
             loan, payments.filter { it.loanId == loan.id }.sortedBy { it.paidAt }, balance(loan),
             onDismiss = { detailLoan = null },
+            onRecordPayment = { reopenStatementAfterPayment = true; paymentFor = loan; detailLoan = null },
             onEditPayment = { editingPayment = it },
             onDeletePayment = { deleteConfirmPayment = it; confirmPaymentDeleteFinal = false }
         )
@@ -965,6 +971,7 @@ private fun LoanDetailsDialog(
     payments: List<PaymentEntity>,
     outstanding: Double,
     onDismiss: () -> Unit,
+    onRecordPayment: () -> Unit,
     onEditPayment: (PaymentEntity) -> Unit,
     onDeletePayment: (PaymentEntity) -> Unit
 ) {
@@ -1104,7 +1111,10 @@ private fun LoanDetailsDialog(
                     Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(onClick = { shareLoanReport(context, loan, payments, outstanding, true) }, modifier = Modifier.weight(1f)) {
+                    Button(onClick = onRecordPayment, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Payments, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("Record")
+                    }
+                    androidx.compose.material3.OutlinedButton(onClick = { shareLoanReport(context, loan, payments, outstanding, true) }, modifier = Modifier.weight(1f)) {
                         Text("Share PDF")
                     }
                     androidx.compose.material3.OutlinedButton(onClick = { shareLoanReport(context, loan, payments, outstanding, false) }, modifier = Modifier.weight(1f)) {
@@ -1294,45 +1304,40 @@ private fun LoanCard(
 @Composable
 private fun CalculatorsScreen(modifier: Modifier) {
     var selected by remember { mutableStateOf("INTEREST") }
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text("Calculators", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            "Calculate loan interest, date tenure, or paddy weight and value. Share any result as an image or PDF.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                androidx.compose.material3.FilterChip(
-                    selected = selected == "INTEREST",
-                    onClick = { selected = "INTEREST" },
-                    label = { Text("Interest") }
-                )
-                androidx.compose.material3.FilterChip(
-                    selected = selected == "TENURE",
-                    onClick = { selected = "TENURE" },
-                    label = { Text("Tenure") }
-                )
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Card(modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(26.dp)),
+            shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+                Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                    Icon(Icons.Filled.Calculate, null, Modifier.padding(13.dp).size(26.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Calculators", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Fast estimates for lending, dates and harvests.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            androidx.compose.material3.FilterChip(
-                selected = selected == "PADDY",
-                onClick = { selected = "PADDY" },
-                label = { Text("Paddy Calculator") }
-            )
+        }
+        Text("CHOOSE A TOOL", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            androidx.compose.material3.FilterChip(selected = selected == "INTEREST",
+                onClick = { selected = "INTEREST" }, label = { Text("Interest") })
+            androidx.compose.material3.FilterChip(selected = selected == "TENURE",
+                onClick = { selected = "TENURE" }, label = { Text("Tenure") })
+            androidx.compose.material3.FilterChip(selected = selected == "PADDY",
+                onClick = { selected = "PADDY" }, label = { Text("Paddy") })
         }
         when (selected) {
             "INTEREST" -> InterestCalculatorCard()
             "TENURE" -> TenureCalculatorCard()
             else -> PaddyCalculatorCard()
         }
-        Text(
-            "Calculations are estimates only and do not change saved loan records.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text("Calculations are estimates only and do not change saved loan records.",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1874,40 +1879,89 @@ private fun HorizontalResultLine(label: String, value: String) {
     }
 }
 
+private fun titleCaseName(name: String): String =
+    name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.joinToString(" ") { word ->
+        word.lowercase(Locale.ROOT).replaceFirstChar { it.titlecase(Locale.ROOT) }
+    }
+
 @Composable
 private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (LoanEntity) -> Double) {
-    // Normalize names so "Ravi", "ravi", and names with extra spaces merge into one person.
+    var searchQuery by remember { mutableStateOf("") }
     val people = loans.flatMap { loan ->
         listOf(loan.personName, loan.personName2, loan.personName3)
             .filter { it.isNotBlank() }
             .map { it.trim() to loan }
-    }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it })
-        .toSortedMap()
-    LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("See each person’s total amount, payments and amount still due.", style = MaterialTheme.typography.bodyMedium) }
-        if (people.isEmpty()) item { EmptyState("No people yet", "Your borrower and lender list will appear here.") }
-        items(people.keys.toList(), key = { it }) { personKey ->
-            val entries = people[personKey].orEmpty()
-            val name = entries.firstOrNull()?.first ?: personKey
+    }.groupBy({ it.first.lowercase(Locale.ROOT) }, { it }).toSortedMap()
+    val visiblePeople = people.filter { (key, entries) ->
+        key.contains(searchQuery.trim(), ignoreCase = true) ||
+            titleCaseName(entries.firstOrNull()?.first ?: key).contains(searchQuery.trim(), ignoreCase = true)
+    }
+    val totalPeopleOutstanding = loans.distinctBy { it.id }.sumOf(balance)
+    LazyColumn(modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("People", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("A clear view of every relationship and the balance across their loan records.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("PEOPLE TRACKED", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(people.size.toString(), style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Total outstanding", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(money(totalPeopleOutstanding), style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+            }
+        }
+        item {
+            OutlinedTextField(searchQuery, { searchQuery = it }, modifier = Modifier.fillMaxWidth(),
+                label = { Text("Search people") }, leadingIcon = { Icon(Icons.Filled.Search, null) },
+                singleLine = true)
+        }
+        if (visiblePeople.isEmpty()) item {
+            if (people.isEmpty()) EmptyState("No people yet", "Your borrower and lender list will appear here.")
+            else EmptyState("No matching people", "Try another name.")
+        }
+        items(visiblePeople.keys.toList(), key = { it }) { personKey ->
+            val entries = visiblePeople[personKey].orEmpty()
+            val name = titleCaseName(entries.firstOrNull()?.first ?: personKey)
             val records = entries.map { it.second }.distinctBy { it.id }
             val lentTotal = records.filter { it.direction == "LENT" }.sumOf(balance)
             val borrowedTotal = records.filter { it.direction == "BORROWED" || it.direction == "BORROWED_FOR_OTHER" }.sumOf(balance)
             val combinedTotal = lentTotal + borrowedTotal
-            Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp)),
-                shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
+                shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("Combined outstanding across ${records.size} loan(s): ${money(combinedTotal)}",
-                        style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                            Text(name.split(" ").take(2).mapNotNull { it.firstOrNull()?.toString() }.joinToString(""),
+                                Modifier.padding(horizontal = 13.dp, vertical = 11.dp), fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text("${records.size} loan ${if (records.size == 1) "record" else "records"}",
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(money(combinedTotal), style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    DetailLine("You lent", money(lentTotal))
+                    DetailLine("You borrowed / for someone", money(borrowedTotal))
                     Text(amountInWords(combinedTotal), style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("You lent · ${money(lentTotal)}",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    Text("You borrowed / borrowed for someone · ${money(borrowedTotal)}",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                    Text("Total = outstanding balances of this person's unique loan records, split by each record's Lent/Borrowed type.",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -1917,7 +1971,8 @@ private fun PeopleScreen(modifier: Modifier, loans: List<LoanEntity>, balance: (
 @Composable
 private fun StatisticsScreen(
     modifier: Modifier, loans: List<LoanEntity>, payments: List<PaymentEntity>,
-    balance: (LoanEntity) -> Double, outstanding: Double, principal: Double
+    balance: (LoanEntity) -> Double, outstanding: Double, principal: Double,
+    paddyRecords: List<SeasonPaddyEntity>
 ) {
     val lent = loans.filter { it.direction == "LENT" }
     val borrowed = loans.filter { it.direction == "BORROWED" || it.direction == "BORROWED_FOR_OTHER" }
@@ -1952,6 +2007,11 @@ private fun StatisticsScreen(
     val currentCount = loans.count { balance(it) > 0 && it.dueDate != null && it.dueDate >= System.currentTimeMillis() }
     val overdueCount = loans.count { balance(it) > 0 && it.dueDate != null && it.dueDate < System.currentTimeMillis() }
     val noDueDateCount = loans.count { balance(it) > 0 && it.dueDate == null }
+    val maxPersonName = maxPerson?.let { entry ->
+        entry.value.distinctBy { it.id }.asSequence()
+            .flatMap { loan -> sequenceOf(loan.personName, loan.personName2, loan.personName3) }
+            .firstOrNull { it.trim().equals(entry.key, ignoreCase = true) }
+    }?.let(::titleCaseName) ?: "—"
     val allocatedByMonth = mutableMapOf<String, Pair<Double, Double>>()
     loans.forEach { loan ->
         var interestAlreadyPaid = 0.0
@@ -2087,8 +2147,34 @@ private fun StatisticsScreen(
             StatCard("Monthly interest", money(monthlyInterest), Modifier.weight(1f))
             StatCard("Loan records", loans.size.toString(), Modifier.weight(1f))
         }
+        val paddyBags = paddyRecords.sumOf { it.bags }
+        val paddyQuintals = paddyRecords.sumOf { it.bags * it.kgPerBag / 100.0 }
+        val paddyValue = paddyRecords.sumOf { it.bags * it.kgPerBag / 100.0 * it.ratePerQuintal }
+        val paddyPaid = paddyRecords.sumOf { it.paidAmount }
+        val storageSummary = paddyRecords.groupBy { it.storageLocation.trim().ifBlank { "Not specified" } }
+            .mapValues { (_, lots) -> lots.sumOf { it.bags * it.kgPerBag / 100.0 } }
+            .toList().sortedByDescending { it.second }.take(4)
+        GlassPanel("Paddy season & storage report", "Harvest, stock locations and settlement totals from saved paddy records") {
+            DetailLine("Recorded lots", paddyRecords.size.toString())
+            DetailLine("Paddy bags", paddyBags.toString())
+            DetailLine("Harvest weight", "${paddyNumber(paddyQuintals)} quintals")
+            DetailLine("Estimated value", money(paddyValue))
+            DetailLine("Paid / remaining", "${money(paddyPaid)} / ${money((paddyValue - paddyPaid).coerceAtLeast(0.0))}")
+            if (storageSummary.isNotEmpty()) {
+                Text("Storage locations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                storageSummary.forEach { (location, quintals) ->
+                    DetailLine(location, "${paddyNumber(quintals)} quintals")
+                }
+            }
+            paddyRecords.groupBy { it.seasonName.trim() }.toSortedMap().forEach { (season, lots) ->
+                val quintals = lots.sumOf { it.bags * it.kgPerBag / 100.0 }
+                DetailLine(season, "${lots.sumOf { it.bags }} bags · ${paddyNumber(quintals)} quintals")
+            }
+            if (paddyRecords.isEmpty()) Text("Add paddy lots to include harvest and storage details in this report.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         StatCard("People tracked", peopleCount.toString(), Modifier.fillMaxWidth())
-        StatCard("Highest outstanding person", maxPerson?.key ?: "—", Modifier.fillMaxWidth())
+        StatCard("Highest outstanding person", maxPersonName, Modifier.fillMaxWidth())
         Text("Balances use simple monthly interest on original principal for each completed month, less recorded payments. Confirm this matches each loan agreement before relying on totals.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -2833,51 +2919,104 @@ private fun PaymentDialog(existing: PaymentEntity?, onDismiss: () -> Unit, onSav
     var reference by remember { mutableStateOf(existing?.referenceNumber ?: "") }
     var paidAt by remember { mutableStateOf(existing?.paidAt ?: System.currentTimeMillis()) }
     val amount = parseAmount(amountText)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Record payment" else "Edit payment") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { amountText = amountInputFormat(it) },
-                    label = { Text("Payment amount (₹)") },
-                    supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
-                    singleLine = true
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        androidx.compose.material3.FilterChip(selected = method == "Cash", onClick = { method = "Cash"; reference = "" }, label = { Text("Cash") })
-                        androidx.compose.material3.FilterChip(selected = method == "UPI", onClick = { method = "UPI" }, label = { Text("UPI") })
-                        androidx.compose.material3.FilterChip(selected = method == "NEFT", onClick = { method = "NEFT" }, label = { Text("NEFT") })
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f),
+            shape = RoundedCornerShape(30.dp), color = MaterialTheme.colorScheme.background, tonalElevation = 8.dp) {
+            Column {
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                    .padding(start = 18.dp, end = 10.dp, top = 14.dp, bottom = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(shape = RoundedCornerShape(15.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Icon(Icons.Filled.Payments, null, Modifier.padding(11.dp).size(24.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        androidx.compose.material3.FilterChip(selected = method == "IMPS", onClick = { method = "IMPS" }, label = { Text("IMPS") })
-                        androidx.compose.material3.FilterChip(selected = method == "RTGS", onClick = { method = "RTGS" }, label = { Text("RTGS") })
-                        androidx.compose.material3.FilterChip(selected = method == "Other", onClick = { method = "Other" }, label = { Text("Other") })
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(if (existing == null) "Record payment" else "Edit payment",
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Capture the amount, method and payment reference.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = onDismiss) { Text("Close") }
+                }
+                Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("PAYMENT AMOUNT", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            OutlinedTextField(value = amountText, onValueChange = { amountText = amountInputFormat(it) },
+                                modifier = Modifier.fillMaxWidth(), label = { Text("Amount (₹)") },
+                                supportingText = { amount?.takeIf { it > 0 }?.let { Text(amountInWords(it)) } },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Payment method", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("Cash", "UPI", "NEFT").forEach { option ->
+                                androidx.compose.material3.FilterChip(selected = method == option,
+                                    onClick = { method = option; if (option == "Cash") reference = "" },
+                                    label = { Text(option) })
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf("IMPS", "RTGS", "Other").forEach { option ->
+                                androidx.compose.material3.FilterChip(selected = method == option,
+                                    onClick = { method = option }, label = { Text(option) })
+                            }
+                        }
+                    }
+                    if (method != "Cash") OutlinedTextField(reference, { reference = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(if (method == "UPI") "UPI UTR number" else "Transaction / reference number") },
+                        singleLine = true)
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Payment date & time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                androidx.compose.material3.OutlinedButton(onClick = {
+                                    val selected = java.util.Calendar.getInstance().apply { timeInMillis = paidAt }
+                                    DatePickerDialog(context, { _, year, month, day ->
+                                        paidAt = java.util.Calendar.getInstance().apply {
+                                            timeInMillis = paidAt
+                                            set(java.util.Calendar.YEAR, year)
+                                            set(java.util.Calendar.MONTH, month)
+                                            set(java.util.Calendar.DAY_OF_MONTH, day)
+                                        }.timeInMillis
+                                    }, selected.get(java.util.Calendar.YEAR), selected.get(java.util.Calendar.MONTH),
+                                        selected.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                                }, modifier = Modifier.weight(1f)) { Text(formatDate(paidAt)) }
+                                androidx.compose.material3.OutlinedButton(onClick = {
+                                    val selected = java.util.Calendar.getInstance().apply { timeInMillis = paidAt }
+                                    TimePickerDialog(context, { _, hour, minute ->
+                                        selected.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                                        selected.set(java.util.Calendar.MINUTE, minute)
+                                        paidAt = selected.timeInMillis
+                                    }, selected.get(java.util.Calendar.HOUR_OF_DAY), selected.get(java.util.Calendar.MINUTE), false).show()
+                                }, modifier = Modifier.weight(1f)) {
+                                    Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(paidAt)))
+                                }
+                            }
+                        }
+                    }
+                    OutlinedTextField(note, { note = it }, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Notes (optional)") }, minLines = 2)
+                }
+                Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Button(onClick = { if (amount != null && amount > 0) onSave(amount, paidAt, method, reference, note) },
+                        modifier = Modifier.weight(1f),
+                        enabled = amount != null && amount > 0 && (method == "Cash" || reference.isNotBlank())) {
+                        Text(if (existing == null) "Save payment" else "Save changes")
                     }
                 }
-                if (method != "Cash") OutlinedTextField(reference, { reference = it }, label = { Text(if (method == "UPI") "UPI UTR number" else "Transaction / reference number") }, singleLine = true)
-                TextButton(onClick = {
-                    val selected = java.util.Calendar.getInstance().apply { timeInMillis = paidAt }
-                    DatePickerDialog(context, { _, year, month, day ->
-                        val date = java.util.Calendar.getInstance().apply { timeInMillis = paidAt; set(year, month, day) }
-                        paidAt = date.timeInMillis
-                    }, selected.get(java.util.Calendar.YEAR), selected.get(java.util.Calendar.MONTH), selected.get(java.util.Calendar.DAY_OF_MONTH)).show()
-                }) { Text("Payment date: ${formatDate(paidAt)}") }
-                TextButton(onClick = {
-                    val selected = java.util.Calendar.getInstance().apply { timeInMillis = paidAt }
-                    TimePickerDialog(context, { _, hour, minute -> selected.set(java.util.Calendar.HOUR_OF_DAY, hour); selected.set(java.util.Calendar.MINUTE, minute); paidAt = selected.timeInMillis }, selected.get(java.util.Calendar.HOUR_OF_DAY), selected.get(java.util.Calendar.MINUTE), false).show()
-                }) { Text("Payment time: ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(paidAt))}") }
-                OutlinedTextField(note, { note = it }, label = { Text("Notes (optional)") })
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (amount != null && amount > 0) onSave(amount, paidAt, method, reference, note) },
-                enabled = amount != null && amount > 0 && (method == "Cash" || reference.isNotBlank())) { Text(if (existing == null) "Save payment" else "Save changes") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+    }
 }
 
 @Composable
@@ -2937,60 +3076,75 @@ private fun PaddySeasonScreen(
     val totalQuintals = visible.sumOf { it.bags * it.kgPerBag / 100.0 }
     val totalValue = visible.sumOf { it.bags * it.kgPerBag / 100.0 * it.ratePerQuintal }
     val totalPaid = visible.sumOf { it.paidAmount }
+    val storageSummary = visible.groupBy { it.storageLocation.trim().ifBlank { "Not specified" } }
+        .mapValues { (_, lots) -> lots.sumOf { it.bags * it.kgPerBag / 100.0 } }
+        .toList().sortedByDescending { it.second }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Paddy seasons & storage", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Track harvest, stock location and payment due by season.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("A season-by-season view of harvest, stock locations and settlement.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Button(onClick = { editing = null; showEditor = true }) { Text("Add") }
+            Button(onClick = { editing = null; showEditor = true }) {
+                Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text("Add lot")
+            }
         }
         OutlinedTextField(value = seasonFilter, onValueChange = { seasonFilter = it.ifBlank { "All seasons" } },
-            label = { Text("Season filter") }, modifier = Modifier.fillMaxWidth(),
-            singleLine = true, supportingText = { Text("Enter a season name or type All seasons") })
+            label = { Text("Filter by season") }, modifier = Modifier.fillMaxWidth(),
+            singleLine = true, supportingText = { Text("Type a season name, or All seasons") })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard("Bags", totalBags.toString(), Modifier.weight(1f))
-            StatCard("Quintals", paddyNumber(totalQuintals), Modifier.weight(1f))
+            StatCard("Paddy bags", totalBags.toString(), Modifier.weight(1f))
+            StatCard("Harvest weight", "${paddyNumber(totalQuintals)} qtl", Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard("Total value", money(totalValue), Modifier.weight(1f))
+            StatCard("Estimated value", money(totalValue), Modifier.weight(1f))
             StatCard("Paid", money(totalPaid), Modifier.weight(1f))
         }
-        StatCard("Balance to pay", money((totalValue - totalPaid).coerceAtLeast(0.0)), Modifier.fillMaxWidth())
-        Text("1 quintal = 100 kg. Total value = bags × kg per bag ÷ 100 × rate per quintal.",
+        Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp)),
+            shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("Storage overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("${storageSummary.size} locations · ${visible.size} recorded lots",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (storageSummary.isEmpty()) Text("Storage details will appear here when you add a paddy lot.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                storageSummary.take(5).forEach { (location, quintals) ->
+                    DetailLine(location, "${paddyNumber(quintals)} quintals")
+                }
+                DetailLine("Balance to pay", money((totalValue - totalPaid).coerceAtLeast(0.0)))
+            }
+        }
+        Text("1 quintal = 100 kg. Value = bags × kg per bag ÷ 100 × rate per quintal.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (visible.isEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("No paddy records yet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("Add a record for each farmer or storage lot. Season, bag count, weight, rate and payments are saved on this device.")
-                    Button(onClick = { editing = null; showEditor = true }) { Text("Add first paddy record") }
-                }
-            }
+            EmptyState("No paddy records yet", "Add a lot to track its season, harvest weight, payment and storage location.")
+            Button(onClick = { editing = null; showEditor = true }, modifier = Modifier.fillMaxWidth()) { Text("Add first paddy lot") }
         } else visible.forEach { record ->
             val quintals = record.bags * record.kgPerBag / 100.0
             val value = quintals * record.ratePerQuintal
-            Card(Modifier.fillMaxWidth().clickable { editing = record; showEditor = true },
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Card(Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(24.dp))
+                .clickable { editing = record; showEditor = true },
+                shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+                Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(record.farmerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text(titleCaseName(record.farmerName), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(record.seasonName + if (record.paddyVariety.isBlank()) "" else " · " + record.paddyVariety,
                                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                         }
                         IconButton(onClick = { confirmDelete = record }) { Icon(Icons.Filled.Delete, contentDescription = "Delete paddy record") }
                     }
-                    DetailLine("Bags / weight", "${record.bags} bags · ${paddyNumber(quintals)} quintals")
-                    DetailLine("Rate per quintal", money(record.ratePerQuintal))
-                    DetailLine("Total value", money(value))
+                    DetailLine("Harvest", "${record.bags} bags · ${paddyNumber(quintals)} quintals")
+                    DetailLine("Rate / quintal", money(record.ratePerQuintal))
+                    DetailLine("Lot value", money(value))
                     DetailLine("Paid / remaining", "${money(record.paidAmount)} / ${money((value - record.paidAmount).coerceAtLeast(0.0))}")
-                    DetailLine("Storage", record.storageLocation.ifBlank { "Not specified" })
+                    DetailLine("Storage location", record.storageLocation.ifBlank { "Not specified" })
                     if (record.notes.isNotBlank()) Text(record.notes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Tap record to edit", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Tap lot to edit details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -2999,7 +3153,7 @@ private fun PaddySeasonScreen(
         onSave = { record -> onSave(record); showEditor = false })
     confirmDelete?.let { record ->
         AlertDialog(onDismissRequest = { confirmDelete = null },
-            title = { Text("Delete paddy record?") },
+            title = { Text("Delete paddy lot?") },
             text = { Text("Delete ${record.farmerName} · ${record.seasonName}? This cannot be undone.") },
             confirmButton = { TextButton(onClick = { onDelete(record); confirmDelete = null }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } })
